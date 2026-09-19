@@ -59,7 +59,7 @@ BASE_LR = 1e-3                     # 3.5e-4 is the CLIP-ReID value; the sharper 
                                    # markedly better at 1e-3 (64 ids/12 epochs: 0.917 -> 0.983 mean top-1)
 WARMUP_LR_INIT = 1e-5
 LR_MIN = 1e-6
-WARMUP_EPOCHS = 5
+WARMUP_EPOCHS = 10
 WEIGHT_DECAY = 1e-4
 EXTRACT_BATCH = 64
 CHECKPOINT_PERIOD = 10
@@ -520,7 +520,9 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
             path = os.path.join(OUTPUT_DIR, f'{BACKBONE}_part_prompts_stage1_{epoch}.pth')
             torch.save({'prompt_learner': prompt_learner.state_dict(), 'optimizer': optimizer.state_dict(),
                         'templates': prompt_learner.templates, 'part_names': PART_NAMES, 'epoch': epoch,
-                        'knobs': dict(H=H, W=W, STRIDE=STRIDE, N_CTX=N_CTX, BACKBONE=BACKBONE)}, path)
+                        'knobs': dict(H=H, W=W, STRIDE=STRIDE, N_CTX=N_CTX, BACKBONE=BACKBONE,
+                                      FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, CONTRAST_NORMALIZE=CONTRAST_NORMALIZE,
+                                      CONTRAST_TEMP=CONTRAST_TEMP, BASE_LR=BASE_LR)}, path)
             logger.info(f'saved {path}')
     logger.info('Stage1 running time: {}'.format(timedelta(seconds=time.monotonic() - all_start)))
 
@@ -542,7 +544,8 @@ def main():
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
         H=H, W=W, STRIDE=STRIDE, N_CTX=N_CTX, MAX_EPOCHS=MAX_EPOCHS, IMS_PER_BATCH=IMS_PER_BATCH, BASE_LR=BASE_LR,
         WARMUP_LR_INIT=WARMUP_LR_INIT, LR_MIN=LR_MIN, WARMUP_EPOCHS=WARMUP_EPOCHS, WEIGHT_DECAY=WEIGHT_DECAY,
-        NUM_IDS=NUM_IDS, IMAGE_DIR=IMAGE_DIR, MASKS_DIR=MASKS_DIR).items()))
+        FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, CONTRAST_NORMALIZE=CONTRAST_NORMALIZE, CONTRAST_TEMP=CONTRAST_TEMP,
+        TEXT_BANK_REFRESH=TEXT_BANK_REFRESH, NUM_IDS=NUM_IDS, IMAGE_DIR=IMAGE_DIR, MASKS_DIR=MASKS_DIR).items()))
 
     h_res, w_res = (H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1
     clip = load_clip_to_cpu(BACKBONE, h_res, w_res, STRIDE).to(DEVICE).eval()

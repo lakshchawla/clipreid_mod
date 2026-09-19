@@ -86,6 +86,9 @@ FUSE_W = 0.0                       # >0: also evaluate d_holistic/mean + FUSE_W 
 BANK_SIZE = 8192                   # cross-batch memory for triplet mining (0 = batch-only negatives)
 BANK_START_EPOCH = 5               # epochs of batch-only mining before the bank is used (features settle first)
 
+EVAL_SLOTWISE_NORM = True          # holistic vector: L2-normalise each slot before concatenating (see
+                                   # holistic_vector). False restores the CLIP-ReID convention of a single
+                                   # normalisation over the concatenation. Eval-only, no retraining needed.
 EVAL_CHUNK = 2048
 CHECKPOINT_PERIOD, EVAL_PERIOD, LOG_PERIOD = 20, 2, 50
 SEED = 1234
@@ -402,14 +405,30 @@ def part_lse_distmat(qp, qv, gp, gv, gamma=LSE_GAMMA, chunk=EVAL_CHUNK):
     return D.numpy(), unmatched.numpy(), valid.numpy()
 
 
+def holistic_vector(g, p):
+    """All slots in one vector, matched with a single distance (no visibility logic) - the CLIP-ReID style
+    of matching applied to the part-aware features.
+
+    Concatenating first and normalising once (CLIP-ReID's convention) makes each slot's influence
+    proportional to its norm: measured at init the global slot carries ~9% of the distance and the five
+    parts ~91%, even though the global slot is individually the strongest. Normalising per slot first
+    gives all six an equal 1/6 share; on a 1-epoch checkpoint that was worth +0.5 mAP / +1.1 Rank-1.
+    """
+    if EVAL_SLOTWISE_NORM:
+        h = torch.cat([F.normalize(g, dim=-1), F.normalize(p, dim=-1).flatten(1)], dim=1)
+    else:
+        h = torch.cat([g, p.flatten(1)], dim=1)
+    return F.normalize(h, dim=1)
+
+
 def evaluate(model, val_loader, num_query, logger, tag):
     g, p, vis, pids, camids = extract(model, val_loader)
     q, gal = slice(0, num_query), slice(num_query, None)
     q_pids, g_pids, q_cams, g_cams = pids[q], pids[gal], camids[q], camids[gal]
 
-    h = F.normalize(torch.cat([g, p.flatten(1)], dim=1), dim=1)
+    h = holistic_vector(g, p)
     d_h = euclidean_distance(h[q].to(DEVICE), h[gal].to(DEVICE))
-    p_lse, v_lse = (torch.cat([g[:, None], p], 1), vis) if LSE_INCLUDE_GLOBAL else (p, vis[:, 1:])
+    p_lse, v_lse = part_embeddings_for_lse(g, p, vis)
     d_lse, unmatched, shared = part_lse_distmat(p_lse[q], v_lse[q], p_lse[gal], v_lse[gal])
 
     results = {'holistic': d_h, 'part_lse': d_lse}
@@ -463,7 +482,8 @@ def make_optimizer(model):
 def save_checkpoint(model, optimizer, scheduler, epoch, path):
     torch.save({'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(),
                 'epoch': epoch, 'knobs': dict(H=H, W=W, STRIDE=STRIDE, BACKBONE=BACKBONE, LSE_GAMMA=LSE_GAMMA,
-                                              LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, PART_NAMES=PART_NAMES)}, path)
+                                              LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, PART_NAMES=PART_NAMES,
+                                              BANK_SIZE=BANK_SIZE, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM)}, path)
 
 
 # ----------------------------------------------------------------------------- stage 2
@@ -546,7 +566,8 @@ def main():
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
         H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
         STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, PART_TRI_W=PART_TRI_W, PART_ID_W=PART_ID_W, I2T_W=I2T_W, PIX_W=PIX_W,
-        MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP).items()))
+        MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
+        BANK_SIZE=BANK_SIZE, BANK_START_EPOCH=BANK_START_EPOCH, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM).items()))
 
     dataset = Market1501(root=DATA_ROOT)
     num_classes, num_query = dataset.num_train_pids, len(dataset.query)
