@@ -64,6 +64,8 @@ EXTRACT_BATCH = 64
 CHECKPOINT_PERIOD = 10
 EVAL_PERIOD = 10
 LOG_PERIOD = 50
+FULL_POOL_NEGATIVES = True         # contrast against the whole dataset instead of the batch (see do_train_stage1)
+TEXT_BANK_REFRESH = 1              # epochs between prompt-bank refreshes (only used when FULL_POOL_NEGATIVES)
 NUM_IDS = None                     # None = all identities; an int limits to the first N (quick runs)
 SEED = 1234
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -356,21 +358,68 @@ def slot_accuracy(img_feats, labels, vis, text_all):
 
 
 # ----------------------------------------------------------------------------- stage 1
-def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger):
-    """CLIP-ReID stage 1 per slot (processor_clipreid_stage1.py:56-97) on cached image features."""
+def build_slot_image_pools(img_feats, labels, vis):
+    """Per slot, the dataset-wide pool of image embeddings whose part is visible: [(feats [Ns,D], labels [Ns])].
+    Static because the image side is frozen and its features are cached."""
+    pools = []
+    for s in range(S):
+        keep = vis[:, s]
+        pools.append((img_feats[keep, s].detach(), labels[keep]))
+    return pools
+
+
+@torch.no_grad()
+def build_text_bank(prompt_learner, text_encoder, num_class, batch=256):
+    """Detached prompts of every identity and slot: [C, K+1, D]."""
+    was_training = prompt_learner.training
+    prompt_learner.eval()
+    bank = torch.cat([encode_text(prompt_learner, text_encoder, torch.arange(i, min(i + batch, num_class), device=DEVICE))
+                      for i in range(0, num_class, batch)]).detach()
+    prompt_learner.train(was_training)
+    return bank
+
+
+def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger, resume=None):
+    """CLIP-ReID stage 1 per slot (processor_clipreid_stage1.py:56-97) on cached image features.
+
+    Negative pool (FULL_POOL_NEGATIVES): both directions contrast against the whole dataset instead of the
+    64-sample batch.
+    * t2i is exact: the image side is frozen and cached, so each in-batch prompt is scored against every
+      image whose slot is visible (columns = the full dataset pool, no gradient needed on them).
+    * i2t uses a prompt bank: every identity's prompt is encoded without gradient (refreshed every
+      TEXT_BANK_REFRESH epochs) and the identities present in the batch are spliced back in with gradient,
+      so each image is scored against all C identities while only in-batch prompts receive gradient.
+      Prompts of absent identities still get gradient whenever they are sampled, and through t2i.
+    `resume` = a checkpoint dict saved by this script: training restarts at its epoch + 1 with the same
+    warmup-cosine schedule; the Adam state is restored when the checkpoint has it."""
     xent = SupConLoss(DEVICE)
     optimizer = torch.optim.Adam(prompt_learner.parameters(), lr=BASE_LR, weight_decay=WEIGHT_DECAY)
     scheduler = create_scheduler(optimizer, num_epochs=MAX_EPOCHS, lr_min=LR_MIN,
                                  warmup_lr_init=WARMUP_LR_INIT, warmup_t=WARMUP_EPOCHS, noise_range=None)
+    start_epoch = 1
+    if resume is not None:
+        start_epoch = resume['epoch'] + 1
+        if 'optimizer' in resume:
+            optimizer.load_state_dict(resume['optimizer'])
+        logger.info(f"resuming from epoch {resume['epoch']} (optimizer state {'restored' if 'optimizer' in resume else 'reset'})")
     loss_meter = AverageMeter()
     num_image = labels.shape[0]
+    num_class = prompt_learner.cls_ctx.shape[0]
     i_ter = num_image // IMS_PER_BATCH
+    slot_pools = build_slot_image_pools(img_feats, labels, vis) if FULL_POOL_NEGATIVES else None
+    bank_labels = torch.arange(num_class, device=DEVICE)
+    text_bank = None
+    if FULL_POOL_NEGATIVES:
+        logger.info('full-dataset negatives: t2i pool per slot = {} images, i2t pool = {} prompts'
+                    .format([int(p[0].shape[0]) for p in slot_pools], num_class))
     all_start = time.monotonic()
     logger.info('start training')
-    for epoch in range(1, MAX_EPOCHS + 1):
+    for epoch in range(start_epoch, MAX_EPOCHS + 1):
         loss_meter.reset()
         scheduler.step(epoch)
         prompt_learner.train()
+        if FULL_POOL_NEGATIVES and (text_bank is None or (epoch - start_epoch) % TEXT_BANK_REFRESH == 0):
+            text_bank = build_text_bank(prompt_learner, text_encoder, num_class)
         iter_list = torch.randperm(num_image, device=DEVICE)
         for i in range(i_ter + 1):
             b_list = iter_list[i * IMS_PER_BATCH:(i + 1) * IMS_PER_BATCH] if i != i_ter else iter_list[i * IMS_PER_BATCH:num_image]
@@ -383,9 +432,16 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
                 keep = vis_b[:, s]
                 if keep.sum() < 2:
                     continue
-                text_s = encode_text(prompt_learner, text_encoder, target[keep], slots=[s])[:, 0]
-                loss = xent(img_b[keep, s], text_s, target[keep], target[keep]) \
-                     + xent(text_s, img_b[keep, s], target[keep], target[keep])
+                tgt, img_s = target[keep], img_b[keep, s]
+                uniq, inv = torch.unique(tgt, return_inverse=True)
+                text_uniq = encode_text(prompt_learner, text_encoder, uniq, slots=[s])[:, 0]
+                text_s = text_uniq[inv]
+                if FULL_POOL_NEGATIVES:
+                    pool_feats, pool_labels = slot_pools[s]
+                    text_cols = text_bank[:, s].index_copy(0, uniq, text_uniq)
+                    loss = xent(img_s, text_cols, tgt, bank_labels) + xent(text_s, pool_feats, tgt, pool_labels)
+                else:
+                    loss = xent(img_s, text_s, tgt, tgt) + xent(text_s, img_s, tgt, tgt)
                 loss.backward()
                 batch_loss += loss.item()
             optimizer.step()
@@ -401,8 +457,8 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
             logger.info('Epoch[{}] image->text top-1 per slot: {}'.format(epoch, {k: round(v, 3) for k, v in acc.items()}))
         if epoch % CHECKPOINT_PERIOD == 0 or epoch == MAX_EPOCHS:
             path = os.path.join(OUTPUT_DIR, f'{BACKBONE}_part_prompts_stage1_{epoch}.pth')
-            torch.save({'prompt_learner': prompt_learner.state_dict(), 'templates': prompt_learner.templates,
-                        'part_names': PART_NAMES, 'epoch': epoch,
+            torch.save({'prompt_learner': prompt_learner.state_dict(), 'optimizer': optimizer.state_dict(),
+                        'templates': prompt_learner.templates, 'part_names': PART_NAMES, 'epoch': epoch,
                         'knobs': dict(H=H, W=W, STRIDE=STRIDE, N_CTX=N_CTX, BACKBONE=BACKBONE)}, path)
             logger.info(f'saved {path}')
     logger.info('Stage1 running time: {}'.format(timedelta(seconds=time.monotonic() - all_start)))
@@ -413,8 +469,10 @@ def main():
     parser = argparse.ArgumentParser(description='CLIP-ReID stage 1 with per-part prompts (RN50)')
     parser.add_argument('--num-ids', type=int, default=NUM_IDS, help='limit to the first N identities')
     parser.add_argument('--epochs', type=int, default=MAX_EPOCHS)
+    parser.add_argument('--resume', type=str, default='', help='checkpoint saved by this script to continue from')
     args = parser.parse_args()
     NUM_IDS, MAX_EPOCHS = args.num_ids, args.epochs
+    resume = torch.load(args.resume, map_location=DEVICE) if args.resume else None
 
     torch.manual_seed(SEED)
     np.random.seed(SEED)
@@ -442,12 +500,15 @@ def main():
         tuple(img_feats.shape), tuple(vis.shape), dict(zip(SLOT_NAMES, vis.float().mean(0).cpu().numpy().round(3).tolist()))))
 
     prompt_learner = PartPromptLearner(num_class, clip, PART_NAMES).to(DEVICE)
+    if resume is not None:
+        prompt_learner.load_state_dict(resume['prompt_learner'])
+        logger.info(f"loaded {args.resume} (epoch {resume['epoch']})")
     logger.info('templates:\n' + '\n'.join(prompt_learner.templates))
     logger.info('trainable parameters: {:,} (cls_ctx {})'.format(prompt_learner.cls_ctx.numel(), tuple(prompt_learner.cls_ctx.shape)))
     acc = slot_accuracy(img_feats, labels, vis, all_text_feats(prompt_learner, text_encoder))
     logger.info('before training image->text top-1 per slot: {} (chance {:.4f})'.format({k: round(v, 3) for k, v in acc.items()}, 1 / num_class))
 
-    do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger)
+    do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger, resume)
 
 
 if __name__ == '__main__':
