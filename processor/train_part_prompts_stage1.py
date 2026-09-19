@@ -55,7 +55,8 @@ MASK_SOFTMAX_WEIGHT, MASK_BG_THRESHOLD = 15, 0.5
 
 MAX_EPOCHS = 60                    # SOLVER.STAGE1 of configs/person/cnn_clipreid.yml
 IMS_PER_BATCH = 64
-BASE_LR = 3.5e-4
+BASE_LR = 1e-3                     # 3.5e-4 is the CLIP-ReID value; the sharper full-pool contrast trains
+                                   # markedly better at 1e-3 (64 ids/12 epochs: 0.917 -> 0.983 mean top-1)
 WARMUP_LR_INIT = 1e-5
 LR_MIN = 1e-6
 WARMUP_EPOCHS = 5
@@ -67,7 +68,7 @@ LOG_PERIOD = 50
 FULL_POOL_NEGATIVES = True         # contrast against the whole dataset instead of the batch (see do_train_stage1)
 TEXT_BANK_REFRESH = 1              # epochs between prompt-bank refreshes (only used when FULL_POOL_NEGATIVES)
 CONTRAST_NORMALIZE = True          # L2-normalise + temperature in the full-pool contrast (see supcon)
-CONTRAST_TEMP = 0.03
+CONTRAST_TEMP = 0.01               # CLIP's own temperature; swept against 0.03/0.07/unnormalised (see docs below)
 NUM_IDS = None                     # None = all identities; an int limits to the first N (quick runs)
 SEED = 1234
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -389,6 +390,24 @@ def build_slot_image_pools(img_feats, labels, vis):
     return pools
 
 
+def t2i_loss_floor(pools, num_class):
+    """Smallest value the t2i term can reach, per slot.
+
+    SupCon averages the log-probability over every positive column: -1/P sum_i log p_i with sum_i p_i <= 1,
+    so the minimum is ln(P). With the dataset-wide pool a prompt has P = all images of its identity (~17 on
+    Market-1501), hence a floor of ~ln(17) = 2.8 per slot; with the old 64-image batch a prompt usually had
+    a single positive, so the floor was ~0. The full-pool loss therefore levels off well above zero by
+    construction - convergence has to be read as 'loss - floor', which is what the epoch log reports.
+    i2t has exactly one positive per row, so its floor is 0.
+    """
+    floors = []
+    for _, lbl in pools:
+        counts = torch.bincount(lbl, minlength=num_class).float()
+        counts = counts[counts > 0]
+        floors.append(float(torch.log(counts.mean())) if counts.numel() else 0.0)
+    return floors
+
+
 @torch.no_grad()
 def build_text_bank(prompt_learner, text_encoder, num_class, batch=256):
     """Detached prompts of every identity and slot: [C, K+1, D]."""
@@ -436,8 +455,16 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
     all_start = time.monotonic()
     logger.info('start training')
     slot_meters = [AverageMeter() for _ in range(S)]
+    i2t_meter, t2i_meter = AverageMeter(), AverageMeter()
+    floors = t2i_loss_floor(slot_pools, num_class) if FULL_POOL_NEGATIVES else [0.0] * S
+    total_floor = sum(floors)
+    if FULL_POOL_NEGATIVES:
+        logger.info('t2i floor ln(mean positives) per slot: {} | total {:.2f} (loss cannot go below this; '
+                    'watch "above floor")'.format({n: round(f, 2) for n, f in zip(SLOT_NAMES, floors)}, total_floor))
     for epoch in range(start_epoch, MAX_EPOCHS + 1):
         loss_meter.reset()
+        i2t_meter.reset()
+        t2i_meter.reset()
         for m in slot_meters:
             m.reset()
         scheduler.step(epoch)
@@ -463,19 +490,27 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
                 if FULL_POOL_NEGATIVES:
                     pool_feats, pool_labels = slot_pools[s]
                     text_cols = text_bank[:, s].index_copy(0, uniq, text_uniq)
-                    loss = supcon(img_s, text_cols, tgt, bank_labels) + supcon(text_s, pool_feats, tgt, pool_labels)
+                    loss_i2t = supcon(img_s, text_cols, tgt, bank_labels)
+                    loss_t2i = supcon(text_s, pool_feats, tgt, pool_labels)
                 else:
-                    loss = xent(img_s, text_s, tgt, tgt) + xent(text_s, img_s, tgt, tgt)
+                    loss_i2t = xent(img_s, text_s, tgt, tgt)
+                    loss_t2i = xent(text_s, img_s, tgt, tgt)
+                loss = loss_i2t + loss_t2i
                 loss.backward()
                 batch_loss += loss.item()
-                slot_meters[s].update(loss.item(), int(keep.sum()))
+                n_keep = int(keep.sum())
+                slot_meters[s].update(loss.item(), n_keep)
+                i2t_meter.update(loss_i2t.item(), n_keep)
+                t2i_meter.update(loss_t2i.item(), n_keep)
             optimizer.step()
             loss_meter.update(batch_loss, len(b_list))
             if (i + 1) % LOG_PERIOD == 0:
                 logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f}, Base Lr: {:.2e}'
                             .format(epoch, i + 1, i_ter + 1, loss_meter.avg, scheduler._get_lr(epoch)[0]))
-        logger.info('Epoch[{}] done. Loss: {:.3f} per slot {} Base Lr: {:.2e}'.format(
-            epoch, loss_meter.avg, {n: round(m.avg, 3) for n, m in zip(SLOT_NAMES, slot_meters)}, scheduler._get_lr(epoch)[0]))
+        logger.info('Epoch[{}] done. Loss: {:.3f} (i2t {:.3f}, t2i {:.3f}, above floor {:.3f}) per slot {} Base Lr: {:.2e}'
+                    .format(epoch, loss_meter.avg, i2t_meter.avg * S, t2i_meter.avg * S,
+                            loss_meter.avg - total_floor, {n: round(m.avg, 3) for n, m in zip(SLOT_NAMES, slot_meters)},
+                            scheduler._get_lr(epoch)[0]))
 
         if epoch % EVAL_PERIOD == 0 or epoch == MAX_EPOCHS:
             prompt_learner.eval()
