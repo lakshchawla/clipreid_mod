@@ -66,6 +66,8 @@ EVAL_PERIOD = 10
 LOG_PERIOD = 50
 FULL_POOL_NEGATIVES = True         # contrast against the whole dataset instead of the batch (see do_train_stage1)
 TEXT_BANK_REFRESH = 1              # epochs between prompt-bank refreshes (only used when FULL_POOL_NEGATIVES)
+CONTRAST_NORMALIZE = True          # L2-normalise + temperature in the full-pool contrast (see supcon)
+CONTRAST_TEMP = 0.03
 NUM_IDS = None                     # None = all identities; an int limits to the first N (quick runs)
 SEED = 1234
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -358,6 +360,25 @@ def slot_accuracy(img_feats, labels, vis, text_all):
 
 
 # ----------------------------------------------------------------------------- stage 1
+def supcon(anchors, cols, a_labels, c_labels):
+    """SupCon (loss/supcontrast.py) over an arbitrary column pool, with optional normalisation.
+
+    The repo's SupConLoss scores raw dot products at temperature 1. Against a 64-column batch that works,
+    but the per-row logit spread of CLIP features is only ~3, so against 751 prompts / 12936 images the
+    softmax stays nearly uniform and the loss cannot fall below ~ln(#columns) - the image side is frozen,
+    so nothing can widen that gap. Normalising and dividing by a small temperature restores the dynamic
+    range the full-dataset pool needs.
+    """
+    if CONTRAST_NORMALIZE:
+        logits = F.normalize(anchors, dim=-1) @ F.normalize(cols, dim=-1).t() / CONTRAST_TEMP
+    else:
+        logits = anchors @ cols.t()
+    logits = logits - logits.max(dim=1, keepdim=True)[0].detach()
+    mask = (a_labels[:, None] == c_labels[None, :]).float()
+    log_prob = logits - torch.logsumexp(logits, dim=1, keepdim=True)
+    return -((mask * log_prob).sum(1) / mask.sum(1).clamp(min=1)).mean()
+
+
 def build_slot_image_pools(img_feats, labels, vis):
     """Per slot, the dataset-wide pool of image embeddings whose part is visible: [(feats [Ns,D], labels [Ns])].
     Static because the image side is frozen and its features are cached."""
@@ -414,8 +435,11 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
                     .format([int(p[0].shape[0]) for p in slot_pools], num_class))
     all_start = time.monotonic()
     logger.info('start training')
+    slot_meters = [AverageMeter() for _ in range(S)]
     for epoch in range(start_epoch, MAX_EPOCHS + 1):
         loss_meter.reset()
+        for m in slot_meters:
+            m.reset()
         scheduler.step(epoch)
         prompt_learner.train()
         if FULL_POOL_NEGATIVES and (text_bank is None or (epoch - start_epoch) % TEXT_BANK_REFRESH == 0):
@@ -439,17 +463,19 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
                 if FULL_POOL_NEGATIVES:
                     pool_feats, pool_labels = slot_pools[s]
                     text_cols = text_bank[:, s].index_copy(0, uniq, text_uniq)
-                    loss = xent(img_s, text_cols, tgt, bank_labels) + xent(text_s, pool_feats, tgt, pool_labels)
+                    loss = supcon(img_s, text_cols, tgt, bank_labels) + supcon(text_s, pool_feats, tgt, pool_labels)
                 else:
                     loss = xent(img_s, text_s, tgt, tgt) + xent(text_s, img_s, tgt, tgt)
                 loss.backward()
                 batch_loss += loss.item()
+                slot_meters[s].update(loss.item(), int(keep.sum()))
             optimizer.step()
             loss_meter.update(batch_loss, len(b_list))
             if (i + 1) % LOG_PERIOD == 0:
                 logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f}, Base Lr: {:.2e}'
                             .format(epoch, i + 1, i_ter + 1, loss_meter.avg, scheduler._get_lr(epoch)[0]))
-        logger.info('Epoch[{}] done. Loss: {:.3f}, Base Lr: {:.2e}'.format(epoch, loss_meter.avg, scheduler._get_lr(epoch)[0]))
+        logger.info('Epoch[{}] done. Loss: {:.3f} per slot {} Base Lr: {:.2e}'.format(
+            epoch, loss_meter.avg, {n: round(m.avg, 3) for n, m in zip(SLOT_NAMES, slot_meters)}, scheduler._get_lr(epoch)[0]))
 
         if epoch % EVAL_PERIOD == 0 or epoch == MAX_EPOCHS:
             prompt_learner.eval()
