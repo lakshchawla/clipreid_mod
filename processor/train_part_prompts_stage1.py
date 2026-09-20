@@ -55,18 +55,24 @@ MASK_SOFTMAX_WEIGHT, MASK_BG_THRESHOLD = 15, 0.5
 
 MAX_EPOCHS = 60                    # SOLVER.STAGE1 of configs/person/cnn_clipreid.yml
 IMS_PER_BATCH = 64
-BASE_LR = 1e-3                     # 3.5e-4 is the CLIP-ReID value; the sharper full-pool contrast trains
-                                   # markedly better at 1e-3 (64 ids/12 epochs: 0.917 -> 0.983 mean top-1)
+BASE_LR = 5e-4                     # 3.5e-4 is the CLIP-ReID value. 1e-3 won short (12-epoch) sweeps but on
+                                   # the 60-epoch schedule it sits near peak for ~15 epochs and the loss
+                                   # rises there (server log, epochs 7-24); 5e-4 keeps the gain without that.
 WARMUP_LR_INIT = 1e-5
 LR_MIN = 1e-6
-WARMUP_EPOCHS = 10
+WARMUP_EPOCHS = 5
 WEIGHT_DECAY = 1e-4
 EXTRACT_BATCH = 64
 CHECKPOINT_PERIOD = 10
 EVAL_PERIOD = 10
 LOG_PERIOD = 50
 FULL_POOL_NEGATIVES = True         # contrast against the whole dataset instead of the batch (see do_train_stage1)
-TEXT_BANK_REFRESH = 1              # epochs between prompt-bank refreshes (only used when FULL_POOL_NEGATIVES)
+T2I_BATCH_POSITIVES = True         # t2i positives = the identity's in-batch images only; its other images are
+                                   # masked out of the softmax (neither positive nor negative). False = SupCon
+                                   # over all of the identity's images, whose floor is ln(#positives).
+TEXT_BANK_REFRESH = 1              # epochs between full prompt-bank rebuilds (only used when FULL_POOL_NEGATIVES)
+TEXT_BANK_MOMENTUM = 0.0           # in-place write-back of freshly encoded prompts: bank = m*old + (1-m)*new;
+                                   # 0 = replace. Keeps every bank row at most ~C/ids-per-batch iterations stale.
 CONTRAST_NORMALIZE = True          # L2-normalise + temperature in the full-pool contrast (see supcon)
 CONTRAST_TEMP = 0.01               # CLIP's own temperature; swept against 0.03/0.07/unnormalised (see docs below)
 NUM_IDS = None                     # None = all identities; an int limits to the first N (quick runs)
@@ -361,7 +367,7 @@ def slot_accuracy(img_feats, labels, vis, text_all):
 
 
 # ----------------------------------------------------------------------------- stage 1
-def supcon(anchors, cols, a_labels, c_labels):
+def supcon(anchors, cols, a_labels, c_labels, pos_mask=None, exclude=None):
     """SupCon (loss/supcontrast.py) over an arbitrary column pool, with optional normalisation.
 
     The repo's SupConLoss scores raw dot products at temperature 1. Against a 64-column batch that works,
@@ -369,25 +375,46 @@ def supcon(anchors, cols, a_labels, c_labels):
     softmax stays nearly uniform and the loss cannot fall below ~ln(#columns) - the image side is frozen,
     so nothing can widen that gap. Normalising and dividing by a small temperature restores the dynamic
     range the full-dataset pool needs.
+
+    pos_mask [A,B] overrides the default positive set (label equality); exclude [A,B] removes columns from
+    the softmax altogether (used to keep an identity's out-of-batch images out of both numerator and
+    denominator).
     """
     if CONTRAST_NORMALIZE:
         logits = F.normalize(anchors, dim=-1) @ F.normalize(cols, dim=-1).t() / CONTRAST_TEMP
     else:
         logits = anchors @ cols.t()
+    if exclude is not None:
+        logits = logits.masked_fill(exclude, float('-inf'))
     logits = logits - logits.max(dim=1, keepdim=True)[0].detach()
-    mask = (a_labels[:, None] == c_labels[None, :]).float()
+    mask = (a_labels[:, None] == c_labels[None, :]) if pos_mask is None else pos_mask
     log_prob = logits - torch.logsumexp(logits, dim=1, keepdim=True)
-    return -((mask * log_prob).sum(1) / mask.sum(1).clamp(min=1)).mean()
+    pos_log_prob = torch.where(mask, log_prob, torch.zeros_like(log_prob))
+    return -(pos_log_prob.sum(1) / mask.sum(1).clamp(min=1)).mean()
 
 
 def build_slot_image_pools(img_feats, labels, vis):
-    """Per slot, the dataset-wide pool of image embeddings whose part is visible: [(feats [Ns,D], labels [Ns])].
+    """Per slot, the dataset-wide pool of image embeddings whose part is visible:
+    [(feats [Ns,D], labels [Ns], column_of_image [N] with -1 for images outside the pool)].
     Static because the image side is frozen and its features are cached."""
     pools = []
     for s in range(S):
         keep = vis[:, s]
-        pools.append((img_feats[keep, s].detach(), labels[keep]))
+        column = torch.full((labels.shape[0],), -1, dtype=torch.long, device=labels.device)
+        column[keep] = torch.arange(int(keep.sum()), device=labels.device)
+        pools.append((img_feats[keep, s].detach(), labels[keep], column))
     return pools
+
+
+def t2i_masks(tgt, pool_labels, batch_columns):
+    """Batch positives, dataset negatives. Rows = in-batch prompts, columns = the slot's dataset pool.
+    Positives = the prompt's identity images that are in this batch (CLIP-ReID's positive set); the
+    identity's other images are excluded from the softmax so they are neither positives nor false negatives.
+    Every other-identity image in the dataset is a negative."""
+    same = tgt[:, None] == pool_labels[None, :]
+    in_batch = torch.zeros(pool_labels.shape[0], dtype=torch.bool, device=tgt.device)
+    in_batch[batch_columns] = True
+    return same & in_batch[None, :], same & ~in_batch[None, :]
 
 
 def t2i_loss_floor(pools, num_class):
@@ -400,8 +427,10 @@ def t2i_loss_floor(pools, num_class):
     construction - convergence has to be read as 'loss - floor', which is what the epoch log reports.
     i2t has exactly one positive per row, so its floor is 0.
     """
+    if T2I_BATCH_POSITIVES:
+        return [0.0] * len(pools)
     floors = []
-    for _, lbl in pools:
+    for _, lbl, _ in pools:
         counts = torch.bincount(lbl, minlength=num_class).float()
         counts = counts[counts > 0]
         floors.append(float(torch.log(counts.mean())) if counts.numel() else 0.0)
@@ -425,11 +454,17 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
     Negative pool (FULL_POOL_NEGATIVES): both directions contrast against the whole dataset instead of the
     64-sample batch.
     * t2i is exact: the image side is frozen and cached, so each in-batch prompt is scored against every
-      image whose slot is visible (columns = the full dataset pool, no gradient needed on them).
-    * i2t uses a prompt bank: every identity's prompt is encoded without gradient (refreshed every
-      TEXT_BANK_REFRESH epochs) and the identities present in the batch are spliced back in with gradient,
-      so each image is scored against all C identities while only in-batch prompts receive gradient.
-      Prompts of absent identities still get gradient whenever they are sampled, and through t2i.
+      image whose slot is visible (columns = the full dataset pool, no gradient needed on them). With
+      T2I_BATCH_POSITIVES the positives stay CLIP-ReID's (the identity's in-batch images) and the identity's
+      remaining images are masked out: averaging over all ~17 images of an identity at a sharp temperature
+      pulled every prompt towards its identity's outlier images and never converged (server run: t2i flat
+      at ~15 above its floor for 50 epochs, head/torso top-1 10-20 points below the batch-local run).
+    * i2t uses a prompt bank: every identity's prompt is encoded without gradient and the identities
+      present in the batch are spliced back in with gradient, so each image is scored against all C
+      identities while only in-batch prompts receive gradient. After each step the fresh prompts are written
+      back into the bank (TEXT_BANK_MOMENTUM); with a rebuild only once per epoch the bank drifted ~200
+      iterations behind the trained prompts and the loss jumped +3 at every epoch boundary. The full
+      rebuild every TEXT_BANK_REFRESH epochs is kept as a safety net.
     `resume` = a checkpoint dict saved by this script: training restarts at its epoch + 1 with the same
     warmup-cosine schedule; the Adam state is restored when the checkpoint has it."""
     xent = SupConLoss(DEVICE)
@@ -458,9 +493,12 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
     i2t_meter, t2i_meter = AverageMeter(), AverageMeter()
     floors = t2i_loss_floor(slot_pools, num_class) if FULL_POOL_NEGATIVES else [0.0] * S
     total_floor = sum(floors)
-    if FULL_POOL_NEGATIVES:
+    if FULL_POOL_NEGATIVES and not T2I_BATCH_POSITIVES:
         logger.info('t2i floor ln(mean positives) per slot: {} | total {:.2f} (loss cannot go below this; '
                     'watch "above floor")'.format({n: round(f, 2) for n, f in zip(SLOT_NAMES, floors)}, total_floor))
+    elif FULL_POOL_NEGATIVES:
+        logger.info('t2i: batch positives, dataset negatives (out-of-batch same-identity images masked out); '
+                    'floor ~0. i2t bank write-back momentum {}'.format(TEXT_BANK_MOMENTUM))
     for epoch in range(start_epoch, MAX_EPOCHS + 1):
         loss_meter.reset()
         i2t_meter.reset()
@@ -488,16 +526,23 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
                 text_uniq = encode_text(prompt_learner, text_encoder, uniq, slots=[s])[:, 0]
                 text_s = text_uniq[inv]
                 if FULL_POOL_NEGATIVES:
-                    pool_feats, pool_labels = slot_pools[s]
+                    pool_feats, pool_labels, column = slot_pools[s]
                     text_cols = text_bank[:, s].index_copy(0, uniq, text_uniq)
                     loss_i2t = supcon(img_s, text_cols, tgt, bank_labels)
-                    loss_t2i = supcon(text_s, pool_feats, tgt, pool_labels)
+                    if T2I_BATCH_POSITIVES:
+                        pos, excl = t2i_masks(tgt, pool_labels, column[b_list[keep]])
+                        loss_t2i = supcon(text_s, pool_feats, tgt, pool_labels, pos_mask=pos, exclude=excl)
+                    else:
+                        loss_t2i = supcon(text_s, pool_feats, tgt, pool_labels)
                 else:
                     loss_i2t = xent(img_s, text_s, tgt, tgt)
                     loss_t2i = xent(text_s, img_s, tgt, tgt)
                 loss = loss_i2t + loss_t2i
                 loss.backward()
                 batch_loss += loss.item()
+                if FULL_POOL_NEGATIVES:
+                    with torch.no_grad():
+                        text_bank[uniq, s] = TEXT_BANK_MOMENTUM * text_bank[uniq, s] + (1 - TEXT_BANK_MOMENTUM) * text_uniq.detach()
                 n_keep = int(keep.sum())
                 slot_meters[s].update(loss.item(), n_keep)
                 i2t_meter.update(loss_i2t.item(), n_keep)
@@ -521,8 +566,9 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
             torch.save({'prompt_learner': prompt_learner.state_dict(), 'optimizer': optimizer.state_dict(),
                         'templates': prompt_learner.templates, 'part_names': PART_NAMES, 'epoch': epoch,
                         'knobs': dict(H=H, W=W, STRIDE=STRIDE, N_CTX=N_CTX, BACKBONE=BACKBONE,
-                                      FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, CONTRAST_NORMALIZE=CONTRAST_NORMALIZE,
-                                      CONTRAST_TEMP=CONTRAST_TEMP, BASE_LR=BASE_LR)}, path)
+                                      FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, T2I_BATCH_POSITIVES=T2I_BATCH_POSITIVES,
+                                      CONTRAST_NORMALIZE=CONTRAST_NORMALIZE, CONTRAST_TEMP=CONTRAST_TEMP,
+                                      TEXT_BANK_MOMENTUM=TEXT_BANK_MOMENTUM, BASE_LR=BASE_LR)}, path)
             logger.info(f'saved {path}')
     logger.info('Stage1 running time: {}'.format(timedelta(seconds=time.monotonic() - all_start)))
 
@@ -544,8 +590,8 @@ def main():
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
         H=H, W=W, STRIDE=STRIDE, N_CTX=N_CTX, MAX_EPOCHS=MAX_EPOCHS, IMS_PER_BATCH=IMS_PER_BATCH, BASE_LR=BASE_LR,
         WARMUP_LR_INIT=WARMUP_LR_INIT, LR_MIN=LR_MIN, WARMUP_EPOCHS=WARMUP_EPOCHS, WEIGHT_DECAY=WEIGHT_DECAY,
-        FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, CONTRAST_NORMALIZE=CONTRAST_NORMALIZE, CONTRAST_TEMP=CONTRAST_TEMP,
-        TEXT_BANK_REFRESH=TEXT_BANK_REFRESH, NUM_IDS=NUM_IDS, IMAGE_DIR=IMAGE_DIR, MASKS_DIR=MASKS_DIR).items()))
+        FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, T2I_BATCH_POSITIVES=T2I_BATCH_POSITIVES, CONTRAST_NORMALIZE=CONTRAST_NORMALIZE,
+        CONTRAST_TEMP=CONTRAST_TEMP, TEXT_BANK_REFRESH=TEXT_BANK_REFRESH, TEXT_BANK_MOMENTUM=TEXT_BANK_MOMENTUM, NUM_IDS=NUM_IDS, IMAGE_DIR=IMAGE_DIR, MASKS_DIR=MASKS_DIR).items()))
 
     h_res, w_res = (H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1
     clip = load_clip_to_cpu(BACKBONE, h_res, w_res, STRIDE).to(DEVICE).eval()
