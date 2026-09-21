@@ -4,22 +4,22 @@ Run from the repo root:
   python processor/train_part_prompts_stage2.py --stage1-ckpt work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_60.pth
 
 What stage 2 does here
-* Image side (trainable): pretrained CLIP RN50 + BPAM pixel classifier (PartAwareModifiedResNet) + part
-  projection Linear(2048->1024) (initialised from CLIP's attention pool c_proj @ v_proj) + BNNeck ID heads.
-  Part pooling uses the *learned* BPAM masks (BPBreID learnable attention); PifPaf masks are only the
-  supervision target of the pixel classifier, so nothing external is needed at test time.
-* Per image: g = xproj[0] (global, aligned with the global prompt), p_k = part_proj(gwap(x4, mask_k))
-  (aligned with the part prompts), c = concat(p_1..p_K) (global_concat_vector), h = cat(g, c) (holistic
-  vector), visibility [N, K+1] (slot 0 always visible).
+* Holistic branch = CLIP-ReID RN50 stage 2, verbatim: gap3 = GAP(x3), gap4 = GAP(x4) with a BNNeck ID head,
+  g = xproj[0] with a BNNeck ID head; triplet on all three; i2t = CE(g @ text_global.T) at full weight; test
+  feature cat(gap4, g). This is what carries the baseline number (89.8 mAP on Market-1501 in the paper) and
+  must be reproduced before parts can be judged - the `clipreid_baseline` eval row is exactly this feature.
+* Part branch (additive): BPAM pixel classifier on x4 -> learned masks (PifPaf masks only supervise it, so
+  nothing external is needed at test time); p_k = part_proj(GWAP(x4, mask_k)) with part_proj initialised
+  from CLIP's attention pool (c_proj @ v_proj); c = concat(p); visibility [N, K+1] (slot 0 always visible).
+  Losses: ID on c (+ optional per-part ID), LSE batch-hard part triplet (per-part cosine distances combined
+  with a log-sum-exp soft-max over mutually visible parts), per-part i2t against the part prompts
+  (PART_I2T_W, kept separate from the global i2t), BPBreID pixel-part CE.
 * Text side (frozen): the stage-1 prompts are encoded once into text_all [C, K+1, 1024].
-* Losses (batch-based negatives, PK sampler): label-smoothed ID on g and c (+ optional per-part ID),
-  global triplet on g (CLIP-ReID), part triplet where per-part cosine distances are combined with a
-  log-sum-exp soft-max over mutually visible parts (one bad part pulls the pair distance up), per-slot
-  i2t cross-entropy against text_all, and the BPBreID pixel-part cross-entropy.
-* Evaluation (every EVAL_PERIOD epochs): mAP / R1 / R5 / R10 for the holistic vector h (euclidean on the
-  normalised concat, CLIP-ReID style) and for the part-based LSE distance (mutual-visibility weights,
-  pairs with no shared part get the worst distance); unmatched-part statistics are logged.
-* Optimiser / schedule / AMP = SOLVER.STAGE2 of configs/person/cnn_clipreid.yml.
+* Evaluation (every EVAL_PERIOD epochs), mAP / R1 / R5 / R10 for four rows: clipreid_baseline
+  (cat(gap4, g)), holistic (cat(gap4, g, parts), slot-wise normalised), part_lse (LSE distance over mutually
+  visible parts; no shared part -> worst distance) and, with FUSE_W > 0, fused. Unmatched-part statistics
+  are logged.
+* Optimiser / schedule / AMP = SOLVER.STAGE2 of configs/person/cnn_clipreid.yml, 256x128 as in the recipe.
 """
 import os
 import sys
@@ -61,7 +61,7 @@ OUTPUT_DIR = './work_dirs/market1501/part_prompts_stage2'
 STAGE1_CKPT = './work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_60.pth'
 
 BACKBONE = 'RN50'
-H, W = 384, 128                    # must match the stage-1 checkpoint (checked at load time)
+H, W = 256, 128                    # CLIP-ReID RN50 recipe (cnn_clipreid.yml); must match the stage-1 checkpoint
 STRIDE = 16
 PIXEL_MEAN, PIXEL_STD = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 PADDING, FLIP_PROB, RE_PROB = 10, 0.5, 0.5
@@ -77,13 +77,16 @@ STEPS, GAMMA = (40, 70), 0.1
 WARMUP_FACTOR, WARMUP_ITERS, WARMUP_METHOD = 0.01, 10, 'linear'
 USE_AMP = True
 
-ID_W, TRI_W, PART_TRI_W, PART_ID_W, I2T_W, PIX_W = 1.0, 1.0, 1.0, 0.0, 1.0, 0.35
+ID_W, TRI_W, I2T_W = 1.0, 1.0, 1.0            # CLIP-ReID stage-2 weights on the holistic branch (GAP(x4), GAP(x3), xproj)
+PART_TRI_W, PART_ID_W, PART_I2T_W, PIX_W = 1.0, 0.0, 0.5, 0.35   # part branch; PART_I2T_W is separate so the
+                                                                 # global i2t keeps CLIP-ReID's full weight
 MARGIN = 0.3
 LSE_GAMMA = 5.0                    # soft-max sharpness over parts (-> max distance as gamma grows)
 LSE_INCLUDE_GLOBAL = False         # add g as slot 0 of the LSE part distance
 FUSE_W = 0.0                       # >0: also evaluate d_holistic/mean + FUSE_W * d_lse/mean
 
-BANK_SIZE = 8192                   # cross-batch memory for triplet mining (0 = batch-only negatives)
+BANK_SIZE = 0                      # cross-batch memory for triplet mining; 0 = batch-only (CLIP-ReID / BPBreID
+                                   # baseline behaviour), 8192 = XBM ablation
 BANK_START_EPOCH = 5               # epochs of batch-only mining before the bank is used (features settle first)
 
 EVAL_SLOTWISE_NORM = True          # holistic vector: L2-normalise each slot before concatenating (see
@@ -180,7 +183,16 @@ class BNNeckHead(nn.Module):
 
 
 class PartCLIPReID(nn.Module):
-    """Trainable image side. forward(x) -> dict(g, p, c, vis, pixels_cls_scores, parts_masks[, score_g, score_c, score_p])."""
+    """Trainable image side = the CLIP-ReID RN50 holistic branch, kept verbatim, plus an additive part branch.
+
+    Holistic branch (make_model_clipreid.py build_transformer, RN50): gap3 = GAP(x3) [1024], gap4 = GAP(x4)
+    [2048] with a BNNeck ID head, g = xproj[0] [1024] with a BNNeck ID head and the i2t loss; triplet on all
+    three; test feature cat(gap4, g). Earlier versions dropped gap3/gap4 and matched on g + parts only, i.e.
+    the parts replaced the CNN feature that carries the baseline number instead of adding to it.
+    Part branch: p_k = part_proj(GWAP(x4, learned mask_k)) [K,1024], c = concat(p), visibility.
+    forward(x) -> dict(gap3, gap4, g, p, c, vis, pixels_cls_scores, parts_masks[, score_gap4, score_g,
+    score_c, score_p]).
+    """
 
     def __init__(self, visual, num_classes):
         super().__init__()
@@ -191,19 +203,22 @@ class PartCLIPReID(nn.Module):
             self.part_proj.weight.copy_(ap.c_proj.weight @ ap.v_proj.weight)
             self.part_proj.bias.copy_(ap.c_proj.weight @ ap.v_proj.bias + ap.c_proj.bias)
         dim = ap.c_proj.out_features
+        self.id_gap4 = BNNeckHead(ap.v_proj.in_features, num_classes)
         self.id_global = BNNeckHead(dim, num_classes)
         self.id_concat = BNNeckHead(K * dim, num_classes)
         self.id_parts = nn.ModuleList([BNNeckHead(dim, num_classes) for _ in range(K)])
 
     def forward(self, x):
-        _, _, xproj, out = self.net(x)
-        g = xproj[0]
+        x3, x4, xproj, out = self.net(x)
+        gap3, gap4, g = x3.mean((2, 3)), x4.mean((2, 3)), xproj[0]
         p = self.part_proj(out['part_emb_x4'])
         c = p.flatten(1)
         vis = out['visibility'].clone()
         vis[:, 0] = True
-        res = dict(g=g, p=p, c=c, vis=vis, pixels_cls_scores=out['pixels_cls_scores'], parts_masks=out['parts_masks'])
+        res = dict(gap3=gap3, gap4=gap4, g=g, p=p, c=c, vis=vis,
+                   pixels_cls_scores=out['pixels_cls_scores'], parts_masks=out['parts_masks'])
         if self.training:
+            res['score_gap4'] = self.id_gap4(gap4)[1]
             res['score_g'] = self.id_global(g)[1]
             res['score_c'] = self.id_concat(c)[1]
             if PART_ID_W > 0:
@@ -332,7 +347,15 @@ def part_embeddings_for_lse(g, p, vis):
 
 
 class Stage2Loss(nn.Module):
-    """loss = ID_W*(ID_g + ID_c [+ PART_ID_W*ID_parts]) + TRI_W*TRI_g + PART_TRI_W*TRI_lse + I2T_W*I2T + PIX_W*PIX."""
+    """Holistic terms are CLIP-ReID stage 2 verbatim (loss/make_loss.py + processor_clipreid_stage2.py):
+        id  = CE(score_gap4) + CE(score_g)               (CLIP-ReID's cls_score, cls_score_proj)
+        tri = triplet(gap3) + triplet(gap4) + triplet(g)   (CLIP-ReID's feat list)
+        i2t = CE(g @ text_global.T)                        (full weight I2T_W, not shared with the parts)
+    Part terms are additive with their own weights:
+        part_id  = CE(score_c) [+ PART_ID_W * per-part CE]     part_tri = LSE batch-hard triplet
+        part_i2t = mean over part slots of CE(p_k @ text_k.T)  pix = BPBreID pixel-part CE
+    loss = ID_W*id + TRI_W*tri + I2T_W*i2t + PART_ID_W'*part_id + PART_TRI_W*part_tri + PART_I2T_W*part_i2t + PIX_W*pix
+    (PART_ID_W' = ID_W for the concat head, PART_ID_W for the per-part heads, as before)."""
 
     def __init__(self, num_classes, text_all):
         super().__init__()
@@ -343,35 +366,37 @@ class Stage2Loss(nn.Module):
 
     def forward(self, res, masks, target, bank=None):
         terms = {}
-        terms['id'] = self.xent(res['score_g'], target) + self.xent(res['score_c'], target)
-        if PART_ID_W > 0:
-            part_id = []
-            for k in range(K):
-                keep = res['vis'][:, k + 1]
-                if keep.sum() > 1:
-                    part_id.append(self.xent(res['score_p'][keep, k], target[keep]))
-            terms['id'] = terms['id'] + PART_ID_W * (sum(part_id) / max(len(part_id), 1))
+        terms['id'] = self.xent(res['score_gap4'], target) + self.xent(res['score_g'], target)
         g_bank = p_bank = None
         if bank is not None:
             bg, bp, bvis, blabels = bank
             g_bank = (bg, blabels)
             bp_lse, bv_lse = part_embeddings_for_lse(bg, bp, bvis)
             p_bank = (bp_lse, bv_lse, blabels)
-        terms['tri'] = self.triplet(res['g'], target, g_bank)
+        terms['tri'] = self.triplet(res['gap3'], target) + self.triplet(res['gap4'], target) + self.triplet(res['g'], target, g_bank)
+        terms['i2t'] = self.xent(res['g'] @ self.text_all[:, 0].t(), target)
+
+        terms['part_id'] = self.xent(res['score_c'], target)
+        if PART_ID_W > 0:
+            part_id = []
+            for k in range(K):
+                keep = res['vis'][:, k + 1]
+                if keep.sum() > 1:
+                    part_id.append(self.xent(res['score_p'][keep, k], target[keep]))
+            terms['part_id'] = terms['part_id'] + PART_ID_W * (sum(part_id) / max(len(part_id), 1))
         p_lse, v_lse = part_embeddings_for_lse(res['g'], res['p'], res['vis'])
         terms['part_tri'] = self.part_triplet(p_lse, v_lse, target, p_bank)
-        i2t = []
-        for s in range(S):
-            keep = res['vis'][:, s]
-            if keep.sum() < 2:
-                continue
-            img_s = res['g'] if s == 0 else res['p'][:, s - 1]
-            i2t.append(self.xent(img_s[keep] @ self.text_all[:, s].t(), target[keep]))
-        terms['i2t'] = sum(i2t) / len(i2t)
+        part_i2t = []
+        for k in range(K):
+            keep = res['vis'][:, k + 1]
+            if keep.sum() >= 2:
+                part_i2t.append(self.xent(res['p'][keep, k] @ self.text_all[:, k + 1].t(), target[keep]))
+        terms['part_i2t'] = sum(part_i2t) / len(part_i2t) if part_i2t else res['p'].sum() * 0
         scores = res['pixels_cls_scores']
         pix_targets = F.interpolate(masks, scores.shape[2:], mode='bilinear', align_corners=True).argmax(1)
         terms['pix'] = F.cross_entropy(scores.permute(0, 2, 3, 1).flatten(0, 2), pix_targets.flatten(), label_smoothing=0.1)
-        total = ID_W * terms['id'] + TRI_W * terms['tri'] + PART_TRI_W * terms['part_tri'] + I2T_W * terms['i2t'] + PIX_W * terms['pix']
+        total = (ID_W * terms['id'] + TRI_W * terms['tri'] + I2T_W * terms['i2t']
+                 + ID_W * terms['part_id'] + PART_TRI_W * terms['part_tri'] + PART_I2T_W * terms['part_i2t'] + PIX_W * terms['pix'])
         return total, terms
 
 
@@ -379,15 +404,16 @@ class Stage2Loss(nn.Module):
 @torch.no_grad()
 def extract(model, loader):
     model.eval()
-    g, p, vis, pids, camids = [], [], [], [], []
+    gap4, g, p, vis, pids, camids = [], [], [], [], [], []
     for img, pid, camid, _, _, _ in loader:
         res = model(img.to(DEVICE))
+        gap4.append(res['gap4'].float().cpu())
         g.append(res['g'].float().cpu())
         p.append(res['p'].float().cpu())
         vis.append(res['vis'].cpu())
         pids.extend(np.asarray(pid))
         camids.extend(np.asarray(camid))
-    return torch.cat(g), torch.cat(p), torch.cat(vis), np.asarray(pids), np.asarray(camids)
+    return torch.cat(gap4), torch.cat(g), torch.cat(p), torch.cat(vis), np.asarray(pids), np.asarray(camids)
 
 
 @torch.no_grad()
@@ -405,33 +431,41 @@ def part_lse_distmat(qp, qv, gp, gv, gamma=LSE_GAMMA, chunk=EVAL_CHUNK):
     return D.numpy(), unmatched.numpy(), valid.numpy()
 
 
-def holistic_vector(g, p):
-    """All slots in one vector, matched with a single distance (no visibility logic) - the CLIP-ReID style
-    of matching applied to the part-aware features.
+def clipreid_test_feature(gap4, g):
+    """Exactly CLIP-ReID's RN50 test feature: cat(GAP(x4), xproj[0]) pre-BN (NECK_FEAT='before'), normalised
+    once (utils/metrics.py R1_mAP_eval with FEAT_NORM='yes'). The reference row every other row is judged against."""
+    return F.normalize(torch.cat([gap4, g], dim=1), dim=1)
+
+
+def holistic_vector(gap4, g, p):
+    """CLIP-ReID's test feature extended with the parts, matched with a single distance (no visibility logic).
 
     Concatenating first and normalising once (CLIP-ReID's convention) makes each slot's influence
-    proportional to its norm: measured at init the global slot carries ~9% of the distance and the five
-    parts ~91%, even though the global slot is individually the strongest. Normalising per slot first
-    gives all six an equal 1/6 share; on a 1-epoch checkpoint that was worth +0.5 mAP / +1.1 Rank-1.
+    proportional to its norm: measured at init the global slot carried ~9% of the distance and the five
+    parts ~91%, even though the global slot is individually the strongest. With EVAL_SLOTWISE_NORM each
+    of the seven slots (gap4, g, K parts) gets an equal share; on a 1-epoch checkpoint that was worth
+    +0.5 mAP / +1.1 Rank-1.
     """
     if EVAL_SLOTWISE_NORM:
-        h = torch.cat([F.normalize(g, dim=-1), F.normalize(p, dim=-1).flatten(1)], dim=1)
+        h = torch.cat([F.normalize(gap4, dim=-1), F.normalize(g, dim=-1), F.normalize(p, dim=-1).flatten(1)], dim=1)
     else:
-        h = torch.cat([g, p.flatten(1)], dim=1)
+        h = torch.cat([gap4, g, p.flatten(1)], dim=1)
     return F.normalize(h, dim=1)
 
 
 def evaluate(model, val_loader, num_query, logger, tag):
-    g, p, vis, pids, camids = extract(model, val_loader)
+    gap4, g, p, vis, pids, camids = extract(model, val_loader)
     q, gal = slice(0, num_query), slice(num_query, None)
     q_pids, g_pids, q_cams, g_cams = pids[q], pids[gal], camids[q], camids[gal]
 
-    h = holistic_vector(g, p)
+    b = clipreid_test_feature(gap4, g)
+    d_b = euclidean_distance(b[q].to(DEVICE), b[gal].to(DEVICE))
+    h = holistic_vector(gap4, g, p)
     d_h = euclidean_distance(h[q].to(DEVICE), h[gal].to(DEVICE))
     p_lse, v_lse = part_embeddings_for_lse(g, p, vis)
     d_lse, unmatched, shared = part_lse_distmat(p_lse[q], v_lse[q], p_lse[gal], v_lse[gal])
 
-    results = {'holistic': d_h, 'part_lse': d_lse}
+    results = {'clipreid_baseline': d_b, 'holistic': d_h, 'part_lse': d_lse}
     if FUSE_W > 0:
         results['fused'] = d_h / d_h.mean() + FUSE_W * d_lse / d_lse.mean()
     logger.info(f'Validation Results - {tag}')
@@ -444,7 +478,7 @@ def evaluate(model, val_loader, num_query, logger, tag):
     for name, distmat in results.items():
         cmc, mAP = eval_func(distmat, q_pids, g_pids, q_cams, g_cams)
         summary[name] = dict(mAP=mAP, R1=cmc[0], R5=cmc[4], R10=cmc[9])
-        logger.info('[{:9s}] mAP: {:.1%}  Rank-1: {:.1%}  Rank-5: {:.1%}  Rank-10: {:.1%}'.format(name, mAP, cmc[0], cmc[4], cmc[9]))
+        logger.info('[{:17s}] mAP: {:.1%}  Rank-1: {:.1%}  Rank-5: {:.1%}  Rank-10: {:.1%}'.format(name, mAP, cmc[0], cmc[4], cmc[9]))
     torch.cuda.empty_cache()
     return summary
 
@@ -495,7 +529,7 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
         optimizer.load_state_dict(resume['optimizer'])
         scheduler.load_state_dict(resume['scheduler'])
     scaler = amp.GradScaler(enabled=USE_AMP)
-    meters = {k: AverageMeter() for k in ['loss', 'id', 'tri', 'part_tri', 'i2t', 'pix', 'acc']}
+    meters = {k: AverageMeter() for k in ['loss', 'id', 'tri', 'i2t', 'part_id', 'part_tri', 'part_i2t', 'pix', 'acc']}
     best = {}
     feat_bank = FeatureBank(BANK_SIZE, model.part_proj.out_features, K, DEVICE) if BANK_SIZE > 0 else None
     if feat_bank is not None:
@@ -520,15 +554,15 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            acc = (res['score_g'].max(1)[1] == target).float().mean()
+            acc = (res['score_gap4'].max(1)[1] == target).float().mean()
             meters['loss'].update(loss.item(), img.shape[0])
             meters['acc'].update(acc.item(), 1)
             for k, v in terms.items():
                 meters[k].update(v.item(), img.shape[0])
             if (n_iter + 1) % LOG_PERIOD == 0:
-                logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f} (id {:.3f} tri {:.3f} part_tri {:.3f} i2t {:.3f} pix {:.3f}) Acc: {:.3f}, Base Lr: {:.2e}'
-                            .format(epoch, n_iter + 1, len(train_loader), meters['loss'].avg, meters['id'].avg, meters['tri'].avg,
-                                    meters['part_tri'].avg, meters['i2t'].avg, meters['pix'].avg, meters['acc'].avg, scheduler.get_lr()[0]))
+                logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f} (id {:.3f} tri {:.3f} i2t {:.3f} | part_id {:.3f} part_tri {:.3f} part_i2t {:.3f} pix {:.3f}) Acc: {:.3f}, Base Lr: {:.2e}'
+                            .format(epoch, n_iter + 1, len(train_loader), meters['loss'].avg, meters['id'].avg, meters['tri'].avg, meters['i2t'].avg,
+                                    meters['part_id'].avg, meters['part_tri'].avg, meters['part_i2t'].avg, meters['pix'].avg, meters['acc'].avg, scheduler.get_lr()[0]))
         time_per_batch = (time.time() - start) / (n_iter + 1)
         logger.info('Epoch {} done. Loss: {:.3f} Time per batch: {:.3f}[s] Speed: {:.1f}[samples/s]'
                     .format(epoch, meters['loss'].avg, time_per_batch, train_loader.batch_size / time_per_batch))
@@ -565,7 +599,7 @@ def main():
     logger = setup_logger('transreid', OUTPUT_DIR, if_train=not args.eval_only)
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
         H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
-        STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, PART_TRI_W=PART_TRI_W, PART_ID_W=PART_ID_W, I2T_W=I2T_W, PIX_W=PIX_W,
+        STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, PART_TRI_W=PART_TRI_W, PART_ID_W=PART_ID_W, PART_I2T_W=PART_I2T_W, PIX_W=PIX_W,
         MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
         BANK_SIZE=BANK_SIZE, BANK_START_EPOCH=BANK_START_EPOCH, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM).items()))
 

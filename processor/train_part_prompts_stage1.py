@@ -47,7 +47,7 @@ MASKS_DIR = f'{DATA_ROOT}/market1501/masks/pifpaf_maskrcnn_filtering/bounding_bo
 OUTPUT_DIR = './work_dirs/market1501/part_prompts_stage1'
 
 BACKBONE = 'RN50'
-H, W = 384, 128                    # image size (notebook setting; cnn_clipreid.yml uses 256x128)
+H, W = 256, 128                    # CLIP-ReID RN50 recipe (cnn_clipreid.yml); 384x128 is an ablation, stage 2 must match
 STRIDE = 16                        # MODEL.STRIDE_SIZE
 PIXEL_MEAN, PIXEL_STD = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 N_CTX = 4                          # learnable ctx tokens per (identity, slot)
