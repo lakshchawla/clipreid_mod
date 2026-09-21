@@ -4,21 +4,22 @@ Run from the repo root:
   python processor/train_part_prompts_stage2.py --stage1-ckpt work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_60.pth
 
 What stage 2 does here
-* Holistic branch = CLIP-ReID RN50 stage 2, verbatim: gap3 = GAP(x3), gap4 = GAP(x4) with a BNNeck ID head,
-  g = xproj[0] with a BNNeck ID head; triplet on all three; i2t = CE(g @ text_global.T) at full weight; test
-  feature cat(gap4, g). This is what carries the baseline number (89.8 mAP on Market-1501 in the paper) and
-  must be reproduced before parts can be judged - the `clipreid_baseline` eval row is exactly this feature.
-* Part branch (additive): BPAM pixel classifier on x4 -> learned masks (PifPaf masks only supervise it, so
-  nothing external is needed at test time); p_k = part_proj(GWAP(x4, mask_k)) with part_proj initialised
-  from CLIP's attention pool (c_proj @ v_proj); c = concat(p); visibility [N, K+1] (slot 0 always visible).
-  Losses: ID on c (+ optional per-part ID), LSE batch-hard part triplet (per-part cosine distances combined
-  with a log-sum-exp soft-max over mutually visible parts), per-part i2t against the part prompts
-  (PART_I2T_W, kept separate from the global i2t), BPBreID pixel-part CE.
-* Text side (frozen): the stage-1 prompts are encoded once into text_all [C, K+1, 1024].
-* Evaluation (every EVAL_PERIOD epochs), mAP / R1 / R5 / R10 for four rows: clipreid_baseline
-  (cat(gap4, g)), holistic (cat(gap4, g, parts), slot-wise normalised), part_lse (LSE distance over mutually
-  visible parts; no shared part -> worst distance) and, with FUSE_W > 0, fused. Unmatched-part statistics
-  are logged.
+* Baseline branch = CLIP-ReID RN50 stage 2, verbatim: gap3 = GAP(x3), gap4 = GAP(x4) with a BNNeck ID head,
+  g = xproj[0] with a BNNeck ID head; triplet on all three; i2t = CE(g @ text_global.T); test feature
+  cat(gap4, g) = the `clipreid_baseline` eval row (paper: 89.8 mAP on Market-1501; reproduced at 89.3).
+* LPIM branch (LanguageGuidedPartInteraction, after PromptSG CVPR'24): K+1 identity-agnostic text queries
+  ("A photo of a person", "A photo of the <part> of a person") cross-attend over the x4 locations with
+  projections initialised from CLIP's attention pool; pure cross-attention (no query-to-query term; optional
+  MIM_SELF_LAYERS). Output z0 (global-semantic token) and z1..zK (parts); attentive pooling gives pbar. The
+  part attention maps are supervised by the PifPaf masks (KL) and a visibility head predicts part presence,
+  so nothing external is needed at test time. Losses: ID + triplet on z0 and pbar, visibility-weighted part
+  triplet (LSE gamma annealed after epoch 40), symmetric SupCon between z_s and the stage-1 identity prompts,
+  attention KL, visibility BCE.
+* Text side (frozen): the stage-1 prompts are encoded once into text_all [C, K+1, 1024] (SupCon targets);
+  the K+1 semantic queries are encoded once from fixed templates.
+* Evaluation (every EVAL_PERIOD epochs), mAP / R1 / R5 / R10 for: clipreid_baseline (cat(gap4, g)), lpim
+  (cat(z0, pbar)), holistic (cat(gap4, g, z0, pbar)), part_lse (LSE over mutually visible parts) and, with
+  FUSE_W > 0, fused. Per-part invisible rate and unmatched-pair statistics are logged.
 * Optimiser / schedule / AMP = SOLVER.STAGE2 of configs/person/cnn_clipreid.yml, 256x128 as in the recipe.
 """
 import os
@@ -40,8 +41,8 @@ import torchvision.transforms.functional as TF
 from torch.utils.data import Dataset, DataLoader
 from torch.cuda import amp
 
-from processor.train_part_prompts_stage1 import (PartAwareModifiedResNet, PartPromptLearner, encode_text,
-                                                  pifpaf_to_masks, PART_NAMES, K, S, SLOT_NAMES)
+from processor.train_part_prompts_stage1 import (PartPromptLearner, encode_text, supcon, pifpaf_to_masks,
+                                                  PART_NAMES, K, S, SLOT_NAMES)
 from model.make_model_clipreid import load_clip_to_cpu, TextEncoder, weights_init_kaiming, weights_init_classifier
 from datasets.market1501 import Market1501
 from datasets.sampler import RandomIdentitySampler
@@ -77,12 +78,18 @@ STEPS, GAMMA = (40, 70), 0.1
 WARMUP_FACTOR, WARMUP_ITERS, WARMUP_METHOD = 0.01, 10, 'linear'
 USE_AMP = True
 
-ID_W, TRI_W, I2T_W = 1.0, 1.0, 1.0            # CLIP-ReID stage-2 weights on the holistic branch (GAP(x4), GAP(x3), xproj)
-PART_TRI_W, PART_ID_W, PART_I2T_W, PIX_W = 1.0, 0.0, 0.5, 0.35   # part branch; PART_I2T_W is separate so the
-                                                                 # global i2t keeps CLIP-ReID's full weight
+ID_W, TRI_W, I2T_W = 1.0, 1.0, 1.0            # CLIP-ReID stage-2 weights on the baseline branch (GAP(x4), GAP(x3), xproj)
+LPIM_ID_W, LPIM_TRI_W = 1.0, 1.0              # ID + triplet on the LPIM global token z0 and the pooled parts
+PART_TRI_W = 1.0                              # per-part triplet on z1..zK (visibility-weighted, LSE annealed)
+SUPCON_W = 0.5                                # symmetric SupCon between z_s and the stage-1 identity prompts (PromptSG lambda)
+ATTN_W, VIS_W = 1.0, 0.1                      # attention-map KL to the PifPaf masks; part-presence BCE for the visibility head
 MARGIN = 0.3
 LSE_GAMMA = 5.0                    # soft-max sharpness over parts (-> max distance as gamma grows)
-LSE_INCLUDE_GLOBAL = False         # add g as slot 0 of the LSE part distance
+LSE_GAMMA_EPOCHS = (40, 80)        # part triplet uses the visibility-weighted mean until epoch 40, then gamma ramps
+                                   # linearly to LSE_GAMMA by epoch 80 (chasing the worst part only once parts are trained)
+LSE_INCLUDE_GLOBAL = False         # add z0 as slot 0 of the LSE part distance
+MIM_SELF_LAYERS = 0                # self-attention blocks after the cross-attention (PromptSG: +1.9 / +1.6 mAP for 1 / 2
+                                   # layers on ViT). 0 = pure cross-attention, no query-to-query interaction.
 FUSE_W = 0.0                       # >0: also evaluate d_holistic/mean + FUSE_W * d_lse/mean
 
 BANK_SIZE = 0                      # cross-batch memory for triplet mining; 0 = batch-only (CLIP-ReID / BPBreID
@@ -182,47 +189,105 @@ class BNNeckHead(nn.Module):
         return feat, self.fc(feat)
 
 
-class PartCLIPReID(nn.Module):
-    """Trainable image side = the CLIP-ReID RN50 holistic branch, kept verbatim, plus an additive part branch.
+class LanguageGuidedPartInteraction(nn.Module):
+    """Language-guided Part Interaction Module (LPIM): K+1 semantic text queries attend over the x4 locations.
 
-    Holistic branch (make_model_clipreid.py build_transformer, RN50): gap3 = GAP(x3) [1024], gap4 = GAP(x4)
-    [2048] with a BNNeck ID head, g = xproj[0] [1024] with a BNNeck ID head and the i2t loss; triplet on all
-    three; test feature cat(gap4, g). Earlier versions dropped gap3/gap4 and matched on g + parts only, i.e.
-    the parts replaced the CNN feature that carries the baseline number instead of adding to it.
-    Part branch: p_k = part_proj(GWAP(x4, learned mask_k)) [K,1024], c = concat(p), visibility.
-    forward(x) -> dict(gap3, gap4, g, p, c, vis, pixels_cls_scores, parts_masks[, score_gap4, score_g,
-    score_c, score_p]).
+    PromptSG (CVPR'24) shows that CLIP-ReID's remaining gap is closed by a multimodal interaction module whose
+    output *is* the ReID feature: cross-attention with the prompt embedding as query and the patch tokens as
+    key/value, trained with ID + triplet. Here that idea is run with K+1 queries - "A photo of a person" and
+    "A photo of the <part> of a person" - so the module yields one global-semantic token and K part tokens.
+    * K/V/output projections start from CLIP's own attention pool (k_proj, v_proj, c_proj, positional
+      embedding), so at initialisation, with near-uniform attention, every query returns CLIP's mean-pooled
+      projected feature; the queries then learn *where* to look. Queries are identity-agnostic and identical
+      at train and test, so no identity prompt or inversion network is needed at inference.
+    * Pure cross-attention: queries never attend to each other (MIM_SELF_LAYERS optional blocks follow it).
+    * The head-averaged attention map of each part query is supervised by its PifPaf mask (KL), which turns the
+      masks into where-to-look supervision instead of hard pooling weights; a visibility head on each part
+      token predicts part presence so visibility is available at test time without masks.
+    * Attentive pooling over the K part tokens (alpha = softmax(w . z_k)) gives one occlusion-aware parts vector.
+    forward(x4) -> dict(z [N,K+1,D], attn [N,K+1,HW], pbar [N,D], alpha [N,K], vis_logit [N,K]).
     """
 
-    def __init__(self, visual, num_classes):
+    def __init__(self, attnpool, text_queries, num_self_layers=MIM_SELF_LAYERS):
         super().__init__()
-        self.net = PartAwareModifiedResNet(visual)
-        ap = visual.attnpool
-        self.part_proj = nn.Linear(ap.v_proj.in_features, ap.c_proj.out_features)
+        C, D = attnpool.k_proj.in_features, attnpool.c_proj.out_features
+        self.num_heads = attnpool.num_heads
+        self.register_buffer('text_queries', text_queries.detach().clone())
+        self.pos_embed = nn.Parameter(attnpool.positional_embedding[1:].detach().clone())
+        self.q_proj = nn.Linear(D, C)
+        self.k_proj = nn.Linear(C, C)
+        self.v_proj = nn.Linear(C, C)
+        self.c_proj = nn.Linear(C, D)
         with torch.no_grad():
-            self.part_proj.weight.copy_(ap.c_proj.weight @ ap.v_proj.weight)
-            self.part_proj.bias.copy_(ap.c_proj.weight @ ap.v_proj.bias + ap.c_proj.bias)
-        dim = ap.c_proj.out_features
-        self.id_gap4 = BNNeckHead(ap.v_proj.in_features, num_classes)
-        self.id_global = BNNeckHead(dim, num_classes)
-        self.id_concat = BNNeckHead(K * dim, num_classes)
-        self.id_parts = nn.ModuleList([BNNeckHead(dim, num_classes) for _ in range(K)])
+            for mine, theirs in [(self.k_proj, attnpool.k_proj), (self.v_proj, attnpool.v_proj), (self.c_proj, attnpool.c_proj)]:
+                mine.weight.copy_(theirs.weight)
+                mine.bias.copy_(theirs.bias)
+            nn.init.normal_(self.q_proj.weight, std=C ** -0.5)
+            nn.init.zeros_(self.q_proj.bias)
+        self.norm = nn.LayerNorm(D)
+        self.ffn = nn.Sequential(nn.Linear(D, 4 * D), nn.GELU(), nn.Linear(4 * D, D))
+        nn.init.zeros_(self.ffn[2].weight)
+        nn.init.zeros_(self.ffn[2].bias)
+        self.self_layers = nn.ModuleList([nn.TransformerEncoderLayer(D, 8, 4 * D, dropout=0.0, batch_first=True, norm_first=True)
+                                          for _ in range(num_self_layers)])
+        self.pool_w = nn.Linear(D, 1)
+        self.vis_head = nn.Linear(D, 1)
+
+    def forward(self, x4):
+        N, C, Hf, Wf = x4.shape
+        HW, h, d = Hf * Wf, self.num_heads, C // self.num_heads
+        tokens = x4.flatten(2).transpose(1, 2) + self.pos_embed[None].to(x4.dtype)
+        Sq = self.text_queries.shape[0]
+        Q = self.q_proj(self.text_queries.to(x4.dtype)).view(Sq, h, d).transpose(0, 1)
+        Kt = self.k_proj(tokens).view(N, HW, h, d).permute(0, 2, 1, 3)
+        V = self.v_proj(tokens).view(N, HW, h, d).permute(0, 2, 1, 3)
+        attn = torch.softmax(torch.einsum('hsd,nhld->nhsl', Q, Kt).float() / math.sqrt(d), dim=-1)
+        out = torch.einsum('nhsl,nhld->nhsd', attn.to(V.dtype), V).permute(0, 2, 1, 3).reshape(N, Sq, C)
+        z = self.c_proj(out)
+        z = z + self.ffn(self.norm(z))
+        for layer in self.self_layers:
+            z = layer(z)
+        parts = z[:, 1:]
+        alpha = torch.softmax(self.pool_w(parts).squeeze(-1).float(), dim=1)
+        pbar = (alpha[..., None].to(parts.dtype) * parts).sum(1)
+        return dict(z=z, attn=attn.mean(1), pbar=pbar, alpha=alpha, vis_logit=self.vis_head(parts).squeeze(-1).float())
+
+
+class PartCLIPReID(nn.Module):
+    """Trainable image side = the CLIP-ReID RN50 branch, verbatim, plus the LPIM part branch.
+
+    Baseline branch (make_model_clipreid.py build_transformer, RN50): gap3 = GAP(x3) [1024], gap4 = GAP(x4)
+    [2048] with a BNNeck ID head, g = xproj[0] [1024] with a BNNeck ID head and the i2t loss; triplet on all
+    three; test feature cat(gap4, g) - the `clipreid_baseline` row.
+    LPIM branch: z0 (global-semantic token) and pbar (attentively pooled parts), each with a BNNeck ID head;
+    z1..zK for the per-part triplet / LSE matching; visibility from the LPIM head.
+    forward(x) -> dict(gap3, gap4, g, z, z0, zparts, pbar, attn, alpha, vis_logit[, score_gap4, score_g,
+    score_z0, score_pbar]).
+    The M1 variant (GWAP parts through a linear map, BPAM masks, concat ID head) is the ablation reference:
+    git show e52d763.
+    """
+
+    def __init__(self, visual, num_classes, text_queries):
+        super().__init__()
+        self.visual = visual
+        self.lpim = LanguageGuidedPartInteraction(visual.attnpool, text_queries)
+        D = visual.attnpool.c_proj.out_features
+        self.id_gap4 = BNNeckHead(visual.attnpool.v_proj.in_features, num_classes)
+        self.id_global = BNNeckHead(D, num_classes)
+        self.id_z0 = BNNeckHead(D, num_classes)
+        self.id_pbar = BNNeckHead(D, num_classes)
 
     def forward(self, x):
-        x3, x4, xproj, out = self.net(x)
+        x3, x4, xproj = self.visual(x)
         gap3, gap4, g = x3.mean((2, 3)), x4.mean((2, 3)), xproj[0]
-        p = self.part_proj(out['part_emb_x4'])
-        c = p.flatten(1)
-        vis = out['visibility'].clone()
-        vis[:, 0] = True
-        res = dict(gap3=gap3, gap4=gap4, g=g, p=p, c=c, vis=vis,
-                   pixels_cls_scores=out['pixels_cls_scores'], parts_masks=out['parts_masks'])
+        out = self.lpim(x4)
+        res = dict(gap3=gap3, gap4=gap4, g=g, z=out['z'], z0=out['z'][:, 0], zparts=out['z'][:, 1:], pbar=out['pbar'],
+                   attn=out['attn'], alpha=out['alpha'], vis_logit=out['vis_logit'], grid=tuple(x4.shape[2:]))
         if self.training:
             res['score_gap4'] = self.id_gap4(gap4)[1]
             res['score_g'] = self.id_global(g)[1]
-            res['score_c'] = self.id_concat(c)[1]
-            if PART_ID_W > 0:
-                res['score_p'] = torch.stack([head(p[:, k])[1] for k, head in enumerate(self.id_parts)], dim=1)
+            res['score_z0'] = self.id_z0(res['z0'])[1]
+            res['score_pbar'] = self.id_pbar(res['pbar'])[1]
         return res
 
 
@@ -231,13 +296,16 @@ def lse_combine(d, M, gamma):
     """Combine per-part distances with a log-sum-exp soft-max over mutually visible parts.
     d, M: [K, A, B] distances and 0/1 mutual-visibility. Returns D [A,B] = (1/gamma) ln sum_k w_k e^{gamma d_k}
     with w_k = M_k / sum_k M_k, valid [A,B] (>= 1 shared part; invalid entries are -1) and the number of
-    unmatched parts per pair [A,B]."""
+    unmatched parts per pair [A,B]. gamma -> 0 is the visibility-weighted mean (BPBreID)."""
     n_shared = M.sum(0)
     valid = n_shared > 0
     w = M / n_shared.clamp(min=1)[None]
-    logits = gamma * d + torch.log(w.clamp(min=1e-12))
-    logits = logits.masked_fill(M == 0, float('-inf'))
-    D = torch.logsumexp(logits, dim=0) / gamma
+    if gamma < 1e-3:
+        D = (w * d).sum(0)
+    else:
+        logits = gamma * d + torch.log(w.clamp(min=1e-12))
+        logits = logits.masked_fill(M == 0, float('-inf'))
+        D = torch.logsumexp(logits, dim=0) / gamma
     D = torch.where(valid, D, torch.full_like(D, -1.0))
     return D, valid, (M.shape[0] - n_shared)
 
@@ -253,7 +321,7 @@ class FeatureBank:
     """Cross-batch memory of detached embeddings (XBM, Wang & al. CVPR20).
 
     Triplet mining inside one PK batch only sees 64 samples / 16 identities. The bank keeps the most recent
-    BANK_SIZE embeddings (g, p, visibility, label), so anchors are mined against the whole dataset: with
+    BANK_SIZE embeddings (z0, part tokens, visibility, label), so anchors are mined against the whole dataset: with
     8192 slots and 12936 training images, a batch is compared against ~2/3 of Market-1501. Bank entries are
     detached (gradient flows only through the anchors), which is what makes the large pool affordable.
     """
@@ -262,7 +330,7 @@ class FeatureBank:
         self.size = size
         self.g = torch.zeros(size, dim, device=device)
         self.p = torch.zeros(size, parts, dim, device=device)
-        self.vis = torch.zeros(size, parts + 1, dtype=torch.bool, device=device)
+        self.vis = torch.zeros(size, parts, dtype=torch.bool, device=device)
         self.labels = torch.zeros(size, dtype=torch.long, device=device)
         self.ptr, self.filled = 0, 0
 
@@ -339,64 +407,85 @@ class PartLSETripletLoss(nn.Module):
         return batch_hard(D, labels, col_labels, valid, self_cols, self.ranking_loss)
 
 
-def part_embeddings_for_lse(g, p, vis):
-    """[N,K,D] and [N,K] visibility used by the LSE distance; optionally includes g as slot 0."""
+def part_embeddings_for_lse(z0, zparts, vis_parts):
+    """[N,M,D] and [N,M] visibility used by the LSE distance; optionally includes z0 (always visible) as slot 0."""
     if LSE_INCLUDE_GLOBAL:
-        return torch.cat([g[:, None], p], dim=1), vis
-    return p, vis[:, 1:]
+        return torch.cat([z0[:, None], zparts], dim=1), torch.cat([torch.ones_like(vis_parts[:, :1]), vis_parts], dim=1)
+    return zparts, vis_parts
+
+
+def lse_gamma_at(epoch):
+    """0 (weighted mean) until LSE_GAMMA_EPOCHS[0], then linear to LSE_GAMMA at LSE_GAMMA_EPOCHS[1]."""
+    e0, e1 = LSE_GAMMA_EPOCHS
+    if epoch <= e0:
+        return 0.0
+    return LSE_GAMMA * min(1.0, (epoch - e0) / max(e1 - e0, 1))
+
+
+def attention_targets(masks, size):
+    """PifPaf soft masks [N,K+1,H,W] -> per-part attention targets [N,K,HW] (sum to 1) and presence [N,K] (bool):
+    a part is present when it wins the argmax somewhere on the feature grid (BPBreID's rule on the targets)."""
+    m = F.interpolate(masks, size, mode='bilinear', align_corners=True)
+    present = F.one_hot(m.argmax(1), m.shape[1]).permute(0, 3, 1, 2).amax((2, 3))[:, 1:].bool()
+    parts = m[:, 1:].flatten(2)
+    return parts / parts.sum(-1, keepdim=True).clamp(min=1e-6), present
 
 
 class Stage2Loss(nn.Module):
-    """Holistic terms are CLIP-ReID stage 2 verbatim (loss/make_loss.py + processor_clipreid_stage2.py):
-        id  = CE(score_gap4) + CE(score_g)               (CLIP-ReID's cls_score, cls_score_proj)
-        tri = triplet(gap3) + triplet(gap4) + triplet(g)   (CLIP-ReID's feat list)
-        i2t = CE(g @ text_global.T)                        (full weight I2T_W, not shared with the parts)
-    Part terms are additive with their own weights:
-        part_id  = CE(score_c) [+ PART_ID_W * per-part CE]     part_tri = LSE batch-hard triplet
-        part_i2t = mean over part slots of CE(p_k @ text_k.T)  pix = BPBreID pixel-part CE
-    loss = ID_W*id + TRI_W*tri + I2T_W*i2t + PART_ID_W'*part_id + PART_TRI_W*part_tri + PART_I2T_W*part_i2t + PIX_W*pix
-    (PART_ID_W' = ID_W for the concat head, PART_ID_W for the per-part heads, as before)."""
+    """Baseline terms are CLIP-ReID stage 2 verbatim (loss/make_loss.py + processor_clipreid_stage2.py):
+        id  = CE(score_gap4) + CE(score_g);  tri = triplet(gap3) + triplet(gap4) + triplet(g);  i2t = CE(g @ text_global.T)
+    LPIM terms (all on features that are matched at test time):
+        lpim_id  = CE(score_z0) + CE(score_pbar);  lpim_tri = triplet(z0) + triplet(pbar)
+        part_tri = batch-hard triplet on z1..zK, visibility-weighted mean -> LSE as gamma anneals (lse_gamma_at)
+        supcon   = mean over slots of the symmetric SupCon between z_s and the batch's stage-1 identity prompts
+                   (PromptSG's L_SupCon, batch positives / batch negatives, normalised, CLIP temperature)
+        attn     = KL(PifPaf part mask || part attention map), present parts only;  vis = BCE(vis_logit, present)
+    loss = ID_W*id + TRI_W*tri + I2T_W*i2t + LPIM_ID_W*lpim_id + LPIM_TRI_W*lpim_tri + PART_TRI_W*part_tri
+           + SUPCON_W*supcon + ATTN_W*attn + VIS_W*vis"""
 
     def __init__(self, num_classes, text_all):
         super().__init__()
         self.xent = CrossEntropyLabelSmooth(num_classes=num_classes)
         self.triplet = GlobalTripletLoss(MARGIN)
-        self.part_triplet = PartLSETripletLoss()
+        self.part_triplet = PartLSETripletLoss(gamma=0.0)
         self.register_buffer('text_all', text_all)
 
     def forward(self, res, masks, target, bank=None):
         terms = {}
         terms['id'] = self.xent(res['score_gap4'], target) + self.xent(res['score_g'], target)
-        g_bank = p_bank = None
-        if bank is not None:
-            bg, bp, bvis, blabels = bank
-            g_bank = (bg, blabels)
-            bp_lse, bv_lse = part_embeddings_for_lse(bg, bp, bvis)
-            p_bank = (bp_lse, bv_lse, blabels)
-        terms['tri'] = self.triplet(res['gap3'], target) + self.triplet(res['gap4'], target) + self.triplet(res['g'], target, g_bank)
+        terms['tri'] = self.triplet(res['gap3'], target) + self.triplet(res['gap4'], target) + self.triplet(res['g'], target)
         terms['i2t'] = self.xent(res['g'] @ self.text_all[:, 0].t(), target)
 
-        terms['part_id'] = self.xent(res['score_c'], target)
-        if PART_ID_W > 0:
-            part_id = []
-            for k in range(K):
-                keep = res['vis'][:, k + 1]
-                if keep.sum() > 1:
-                    part_id.append(self.xent(res['score_p'][keep, k], target[keep]))
-            terms['part_id'] = terms['part_id'] + PART_ID_W * (sum(part_id) / max(len(part_id), 1))
-        p_lse, v_lse = part_embeddings_for_lse(res['g'], res['p'], res['vis'])
+        terms['lpim_id'] = self.xent(res['score_z0'], target) + self.xent(res['score_pbar'], target)
+        z0_bank = p_bank = None
+        if bank is not None:
+            bz0, bzp, bvis, blabels = bank
+            z0_bank = (bz0, blabels)
+            p_bank = part_embeddings_for_lse(bz0, bzp, bvis) + (blabels,)
+        terms['lpim_tri'] = self.triplet(res['z0'], target, z0_bank) + self.triplet(res['pbar'], target)
+
+        attn_target, present = attention_targets(masks, res['grid'])
+        p_lse, v_lse = part_embeddings_for_lse(res['z0'], res['zparts'], present)
         terms['part_tri'] = self.part_triplet(p_lse, v_lse, target, p_bank)
-        part_i2t = []
-        for k in range(K):
-            keep = res['vis'][:, k + 1]
-            if keep.sum() >= 2:
-                part_i2t.append(self.xent(res['p'][keep, k] @ self.text_all[:, k + 1].t(), target[keep]))
-        terms['part_i2t'] = sum(part_i2t) / len(part_i2t) if part_i2t else res['p'].sum() * 0
-        scores = res['pixels_cls_scores']
-        pix_targets = F.interpolate(masks, scores.shape[2:], mode='bilinear', align_corners=True).argmax(1)
-        terms['pix'] = F.cross_entropy(scores.permute(0, 2, 3, 1).flatten(0, 2), pix_targets.flatten(), label_smoothing=0.1)
+
+        text_b = self.text_all[target]
+        supcon_terms = []
+        for s_ in range(S):
+            keep = torch.ones_like(target, dtype=torch.bool) if s_ == 0 else present[:, s_ - 1]
+            if keep.sum() < 2:
+                continue
+            z_s, t_s, tgt = res['z'][keep, s_].float(), text_b[keep, s_], target[keep]
+            supcon_terms.append(supcon(z_s, t_s, tgt, tgt) + supcon(t_s, z_s, tgt, tgt))
+        terms['supcon'] = sum(supcon_terms) / len(supcon_terms)
+
+        attn = res['attn'][:, 1:].float().clamp(min=1e-8)
+        kl = (attn_target * (attn_target.clamp(min=1e-8).log() - attn.log())).sum(-1)
+        terms['attn'] = (kl * present).sum() / present.sum().clamp(min=1)
+        terms['vis'] = F.binary_cross_entropy_with_logits(res['vis_logit'], present.float())
+
         total = (ID_W * terms['id'] + TRI_W * terms['tri'] + I2T_W * terms['i2t']
-                 + ID_W * terms['part_id'] + PART_TRI_W * terms['part_tri'] + PART_I2T_W * terms['part_i2t'] + PIX_W * terms['pix'])
+                 + LPIM_ID_W * terms['lpim_id'] + LPIM_TRI_W * terms['lpim_tri'] + PART_TRI_W * terms['part_tri']
+                 + SUPCON_W * terms['supcon'] + ATTN_W * terms['attn'] + VIS_W * terms['vis'])
         return total, terms
 
 
@@ -404,16 +493,16 @@ class Stage2Loss(nn.Module):
 @torch.no_grad()
 def extract(model, loader):
     model.eval()
-    gap4, g, p, vis, pids, camids = [], [], [], [], [], []
+    feats = {k: [] for k in ['gap4', 'g', 'z0', 'pbar', 'zparts', 'vis']}
+    pids, camids = [], []
     for img, pid, camid, _, _, _ in loader:
         res = model(img.to(DEVICE))
-        gap4.append(res['gap4'].float().cpu())
-        g.append(res['g'].float().cpu())
-        p.append(res['p'].float().cpu())
-        vis.append(res['vis'].cpu())
+        for k in ['gap4', 'g', 'z0', 'pbar', 'zparts']:
+            feats[k].append(res[k].float().cpu())
+        feats['vis'].append((res['vis_logit'] > 0).cpu())
         pids.extend(np.asarray(pid))
         camids.extend(np.asarray(camid))
-    return torch.cat(gap4), torch.cat(g), torch.cat(p), torch.cat(vis), np.asarray(pids), np.asarray(camids)
+    return {k: torch.cat(v) for k, v in feats.items()}, np.asarray(pids), np.asarray(camids)
 
 
 @torch.no_grad()
@@ -431,47 +520,38 @@ def part_lse_distmat(qp, qv, gp, gv, gamma=LSE_GAMMA, chunk=EVAL_CHUNK):
     return D.numpy(), unmatched.numpy(), valid.numpy()
 
 
-def clipreid_test_feature(gap4, g):
-    """Exactly CLIP-ReID's RN50 test feature: cat(GAP(x4), xproj[0]) pre-BN (NECK_FEAT='before'), normalised
-    once (utils/metrics.py R1_mAP_eval with FEAT_NORM='yes'). The reference row every other row is judged against."""
-    return F.normalize(torch.cat([gap4, g], dim=1), dim=1)
-
-
-def holistic_vector(gap4, g, p):
-    """CLIP-ReID's test feature extended with the parts, matched with a single distance (no visibility logic).
-
-    Concatenating first and normalising once (CLIP-ReID's convention) makes each slot's influence
-    proportional to its norm: measured at init the global slot carried ~9% of the distance and the five
-    parts ~91%, even though the global slot is individually the strongest. With EVAL_SLOTWISE_NORM each
-    of the seven slots (gap4, g, K parts) gets an equal share; on a 1-epoch checkpoint that was worth
-    +0.5 mAP / +1.1 Rank-1.
-    """
+def concat_feature(*slots):
+    """Slots concatenated into one retrieval vector. With EVAL_SLOTWISE_NORM each slot is L2-normalised first so
+    all slots weigh equally (concatenating then normalising once - CLIP-ReID's convention - weights slots by norm:
+    measured at init the global slot carried ~9% of the distance against five parts). Normalised once at the end."""
     if EVAL_SLOTWISE_NORM:
-        h = torch.cat([F.normalize(gap4, dim=-1), F.normalize(g, dim=-1), F.normalize(p, dim=-1).flatten(1)], dim=1)
-    else:
-        h = torch.cat([gap4, g, p.flatten(1)], dim=1)
-    return F.normalize(h, dim=1)
+        slots = [F.normalize(x, dim=-1) for x in slots]
+    return F.normalize(torch.cat(slots, dim=1), dim=1)
 
 
 def evaluate(model, val_loader, num_query, logger, tag):
-    gap4, g, p, vis, pids, camids = extract(model, val_loader)
+    f, pids, camids = extract(model, val_loader)
     q, gal = slice(0, num_query), slice(num_query, None)
     q_pids, g_pids, q_cams, g_cams = pids[q], pids[gal], camids[q], camids[gal]
 
-    b = clipreid_test_feature(gap4, g)
-    d_b = euclidean_distance(b[q].to(DEVICE), b[gal].to(DEVICE))
-    h = holistic_vector(gap4, g, p)
-    d_h = euclidean_distance(h[q].to(DEVICE), h[gal].to(DEVICE))
-    p_lse, v_lse = part_embeddings_for_lse(g, p, vis)
-    d_lse, unmatched, shared = part_lse_distmat(p_lse[q], v_lse[q], p_lse[gal], v_lse[gal])
+    def dist(vec):
+        return euclidean_distance(vec[q].to(DEVICE), vec[gal].to(DEVICE))
 
-    results = {'clipreid_baseline': d_b, 'holistic': d_h, 'part_lse': d_lse}
+    results = {
+        'clipreid_baseline': dist(F.normalize(torch.cat([f['gap4'], f['g']], dim=1), dim=1)),
+        'lpim': dist(concat_feature(f['z0'], f['pbar'])),
+        'holistic': dist(concat_feature(f['gap4'], f['g'], f['z0'], f['pbar'])),
+    }
+    p_lse, v_lse = part_embeddings_for_lse(f['z0'], f['zparts'], f['vis'])
+    d_lse, unmatched, shared = part_lse_distmat(p_lse[q], v_lse[q], p_lse[gal], v_lse[gal])
+    results['part_lse'] = d_lse
     if FUSE_W > 0:
-        results['fused'] = d_h / d_h.mean() + FUSE_W * d_lse / d_lse.mean()
+        results['fused'] = results['holistic'] / results['holistic'].mean() + FUSE_W * d_lse / d_lse.mean()
+
     logger.info(f'Validation Results - {tag}')
-    logger.info('invisible rate per slot | query: {} | gallery: {}'.format(
-        dict(zip(SLOT_NAMES, (1 - vis[q].float().mean(0)).numpy().round(3).tolist())),
-        dict(zip(SLOT_NAMES, (1 - vis[gal].float().mean(0)).numpy().round(3).tolist()))))
+    logger.info('invisible rate per part | query: {} | gallery: {}'.format(
+        dict(zip(PART_NAMES, (1 - f['vis'][q].float().mean(0)).numpy().round(3).tolist())),
+        dict(zip(PART_NAMES, (1 - f['vis'][gal].float().mean(0)).numpy().round(3).tolist()))))
     logger.info('query-gallery pairs with >=1 unmatched part: {:.1%} | with no shared part: {:.2%} | mean unmatched parts: {:.2f}'.format(
         (unmatched > 0).mean(), (~shared).mean(), unmatched.mean()))
     summary = {}
@@ -500,6 +580,16 @@ def build_text_targets(clip, num_classes, stage1_ckpt, logger):
     return text_all.float()
 
 
+@torch.no_grad()
+def build_semantic_queries(clip, logger):
+    """The K+1 identity-agnostic LPIM queries through the frozen CLIP text encoder: [K+1, 1024]."""
+    from model.clip.clip import tokenize
+    templates = ['A photo of a person.'] + [f"A photo of the {p.replace('_', ' ')} of a person." for p in PART_NAMES]
+    tq = clip.encode_text(tokenize(templates).to(DEVICE)).float()
+    logger.info('LPIM queries: ' + ' | '.join(templates))
+    return tq
+
+
 def make_optimizer(model):
     """make_optimizer_2stage (solver/make_optimizer_prompt.py) without the config object."""
     params = []
@@ -516,7 +606,7 @@ def make_optimizer(model):
 def save_checkpoint(model, optimizer, scheduler, epoch, path):
     torch.save({'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(),
                 'epoch': epoch, 'knobs': dict(H=H, W=W, STRIDE=STRIDE, BACKBONE=BACKBONE, LSE_GAMMA=LSE_GAMMA,
-                                              LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, PART_NAMES=PART_NAMES,
+                                              LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, PART_NAMES=PART_NAMES, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
                                               BANK_SIZE=BANK_SIZE, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM)}, path)
 
 
@@ -529,9 +619,9 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
         optimizer.load_state_dict(resume['optimizer'])
         scheduler.load_state_dict(resume['scheduler'])
     scaler = amp.GradScaler(enabled=USE_AMP)
-    meters = {k: AverageMeter() for k in ['loss', 'id', 'tri', 'i2t', 'part_id', 'part_tri', 'part_i2t', 'pix', 'acc']}
+    meters = {k: AverageMeter() for k in ['loss', 'id', 'tri', 'i2t', 'lpim_id', 'lpim_tri', 'part_tri', 'supcon', 'attn', 'vis', 'acc']}
     best = {}
-    feat_bank = FeatureBank(BANK_SIZE, model.part_proj.out_features, K, DEVICE) if BANK_SIZE > 0 else None
+    feat_bank = FeatureBank(BANK_SIZE, model.lpim.c_proj.out_features, K, DEVICE) if BANK_SIZE > 0 else None
     if feat_bank is not None:
         logger.info(f'cross-batch memory for triplet mining: {BANK_SIZE} slots, used from epoch {BANK_START_EPOCH}')
     all_start = time.monotonic()
@@ -540,6 +630,7 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
         for m in meters.values():
             m.reset()
         scheduler.step()
+        criterion.part_triplet.gamma = lse_gamma_at(epoch)
         model.train()
         start = time.time()
         for n_iter, (img, masks, target, _) in enumerate(train_loader):
@@ -550,7 +641,7 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
                 res = model(img)
                 loss, terms = criterion(res, masks, target, feat_bank.get() if use_bank else None)
             if feat_bank is not None:
-                feat_bank.add(res['g'], res['p'], res['vis'], target)
+                feat_bank.add(res['z0'], res['zparts'], res['vis_logit'] > 0, target)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -560,9 +651,12 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
             for k, v in terms.items():
                 meters[k].update(v.item(), img.shape[0])
             if (n_iter + 1) % LOG_PERIOD == 0:
-                logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f} (id {:.3f} tri {:.3f} i2t {:.3f} | part_id {:.3f} part_tri {:.3f} part_i2t {:.3f} pix {:.3f}) Acc: {:.3f}, Base Lr: {:.2e}'
-                            .format(epoch, n_iter + 1, len(train_loader), meters['loss'].avg, meters['id'].avg, meters['tri'].avg, meters['i2t'].avg,
-                                    meters['part_id'].avg, meters['part_tri'].avg, meters['part_i2t'].avg, meters['pix'].avg, meters['acc'].avg, scheduler.get_lr()[0]))
+                m = {k: v.avg for k, v in meters.items()}
+                logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f} (id {:.3f} tri {:.3f} i2t {:.3f} | lpim_id {:.3f} lpim_tri {:.3f} '
+                            'part_tri {:.3f} supcon {:.3f} attn {:.3f} vis {:.3f}) Acc: {:.3f}, Base Lr: {:.2e}, LSE gamma: {:.2f}'
+                            .format(epoch, n_iter + 1, len(train_loader), m['loss'], m['id'], m['tri'], m['i2t'], m['lpim_id'],
+                                    m['lpim_tri'], m['part_tri'], m['supcon'], m['attn'], m['vis'], m['acc'],
+                                    scheduler.get_lr()[0], criterion.part_triplet.gamma))
         time_per_batch = (time.time() - start) / (n_iter + 1)
         logger.info('Epoch {} done. Loss: {:.3f} Time per batch: {:.3f}[s] Speed: {:.1f}[samples/s]'
                     .format(epoch, meters['loss'].avg, time_per_batch, train_loader.batch_size / time_per_batch))
@@ -599,7 +693,8 @@ def main():
     logger = setup_logger('transreid', OUTPUT_DIR, if_train=not args.eval_only)
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
         H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
-        STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, PART_TRI_W=PART_TRI_W, PART_ID_W=PART_ID_W, PART_I2T_W=PART_I2T_W, PIX_W=PIX_W,
+        STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, LPIM_ID_W=LPIM_ID_W, LPIM_TRI_W=LPIM_TRI_W, PART_TRI_W=PART_TRI_W,
+        SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
         MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
         BANK_SIZE=BANK_SIZE, BANK_START_EPOCH=BANK_START_EPOCH, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM).items()))
 
@@ -610,7 +705,8 @@ def main():
     h_res, w_res = (H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1
     clip = load_clip_to_cpu(BACKBONE, h_res, w_res, STRIDE).to(DEVICE)
     text_all = build_text_targets(clip, num_classes, args.stage1_ckpt, logger)
-    model = PartCLIPReID(clip.visual, num_classes).to(DEVICE)
+    text_queries = build_semantic_queries(clip, logger)
+    model = PartCLIPReID(clip.visual, num_classes, text_queries).to(DEVICE)
     del clip
     torch.cuda.empty_cache()
     criterion = Stage2Loss(num_classes, text_all).to(DEVICE)

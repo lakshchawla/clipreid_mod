@@ -342,12 +342,14 @@ def extract_features(image_encoder, transform, paths, masks, logger):
         if (i // EXTRACT_BATCH + 1) % LOG_PERIOD == 0:
             logger.info(f'extracted {i + len(x)}/{len(paths)} images')
     logger.info(f'feature extraction time: {timedelta(seconds=time.monotonic() - t0)}')
-    return torch.cat(feats), torch.cat(vis)
+    feats, vis = torch.cat(feats), torch.cat(vis)
+    torch.cuda.empty_cache()
+    return feats, vis
 
 
 # ----------------------------------------------------------------------------- evaluation
 @torch.no_grad()
-def all_text_feats(prompt_learner, text_encoder, batch=256):
+def all_text_feats(prompt_learner, text_encoder, batch=96):
     num_class = prompt_learner.cls_ctx.shape[0]
     out = [encode_text(prompt_learner, text_encoder, torch.arange(i, min(i + batch, num_class), device=DEVICE))
            for i in range(0, num_class, batch)]
@@ -438,7 +440,7 @@ def t2i_loss_floor(pools, num_class):
 
 
 @torch.no_grad()
-def build_text_bank(prompt_learner, text_encoder, num_class, batch=256):
+def build_text_bank(prompt_learner, text_encoder, num_class, batch=96):
     """Detached prompts of every identity and slot: [C, K+1, D]."""
     was_training = prompt_learner.training
     prompt_learner.eval()
