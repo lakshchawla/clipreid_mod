@@ -75,6 +75,10 @@ TEXT_BANK_MOMENTUM = 0.0           # in-place write-back of freshly encoded prom
                                    # 0 = replace. Keeps every bank row at most ~C/ids-per-batch iterations stale.
 CONTRAST_NORMALIZE = True          # L2-normalise + temperature in the full-pool contrast (see supcon)
 CONTRAST_TEMP = 0.01               # CLIP's own temperature; swept against 0.03/0.07/unnormalised (see docs below)
+TAB_ENABLED = False                # Text Attention Block: image-as-query cross-attention over the prompt tokens (see TextAttentionBlock)
+TAB_W = 0.5                        # weight of the auxiliary TAB contrast; the plain-EOT contrast stays the primary loss
+TAB_DIM, TAB_HEADS = 256, 4
+TAB_T2I_POOL = 2048                # sampled negative images for the TAB t2i term (conditioning over the full pool is ~60 GFLOP/slot)
 NUM_IDS = None                     # None = all identities; an int limits to the first N (quick runs)
 SEED = 1234
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -306,6 +310,70 @@ def encode_text(prompt_learner, text_encoder, label, slots=None):
     return text_encoder(prompts, tokenized).view(label.shape[0], -1, text_encoder.text_projection.shape[1])
 
 
+def encode_text_tokens(prompt_learner, text_encoder, label, slots):
+    """Same forward as TextEncoder (make_model_clipreid.py) but keeps every token: returns the projected token
+    states [B*len(slots), 77, 1024], the EOT vector [B*len(slots), 1024] (bit-identical to encode_text) and the
+    key mask [B*len(slots), 77] (positions up to and including EOT; the padding after it is masked out)."""
+    prompts, tokenized = prompt_learner(label, slots)
+    x = prompts + text_encoder.positional_embedding.type(text_encoder.dtype)
+    x = text_encoder.transformer(x.permute(1, 0, 2)).permute(1, 0, 2)
+    x = text_encoder.ln_final(x).type(text_encoder.dtype)
+    tokens = x @ text_encoder.text_projection
+    eot_pos = tokenized.argmax(dim=-1)
+    eot = tokens[torch.arange(tokens.shape[0], device=tokens.device), eot_pos]
+    key_mask = torch.arange(tokens.shape[1], device=tokens.device)[None] <= eot_pos[:, None]
+    return tokens, eot, key_mask
+
+
+class TextAttentionBlock(nn.Module):
+    """TAB: the image is the query, the prompt's token states are keys and values.
+
+    Stage 1 normally contrasts an image slot embedding against the EOT-pooled prompt. TAB adds an
+    image-conditioned pooling of the same prompt: q = W_q x_image attends over the 77 token states (keys after EOT
+    masked), and the result is added as a residual on the EOT vector, t_hat = t_eot + W_o Attn(q, K, V).
+    * W_o is zero-initialised, so with TAB enabled the block starts as the identity on t_eot: the first step is
+      numerically the plain-EOT contrast, and every setting validated for it still holds.
+    * Used only as an auxiliary loss in stage 1 (TAB_W). Stage 2 keeps consuming the per-identity EOT snapshot,
+      so TAB can only help by making cls_ctx better under EOT pooling - the plain-EOT top-1 is the pass/fail metric.
+    * The block cannot bypass the prompts: template tokens are identical across identities, so every identity
+      signal in K/V still comes from the ctx tokens.
+    Query variants (test, see query()): the part embedding alone, or the part embedding gated by the image's
+    global embedding - both L2-normalised first and the product rescaled to |x_part|, so the two variants feed
+    the attention at the same scale and differ only in direction (the raw product of two ~5-norm vectors has
+    ~25x scale and sign flips).
+    """
+
+    def __init__(self, dim=1024, d_tab=TAB_DIM, heads=TAB_HEADS):
+        super().__init__()
+        self.heads = heads
+        self.w_q = nn.Linear(dim, d_tab)
+        self.w_k = nn.Linear(dim, d_tab)
+        self.w_v = nn.Linear(dim, d_tab)
+        self.w_o = nn.Linear(d_tab, dim)
+        nn.init.zeros_(self.w_o.weight)
+        nn.init.zeros_(self.w_o.bias)
+
+    def query(self, x_part, x_global):
+        q = self.w_q(x_part)                                                                       # q = part embedding
+        # q = self.w_q(F.normalize(x_part, dim=-1) * F.normalize(x_global, dim=-1)                  # q = part (x) global (test)
+        #              * x_part.shape[-1] ** 0.5 * x_part.norm(dim=-1, keepdim=True))               #   rescaled to |x_part|
+        return q
+
+    def kv(self, tokens):
+        """tokens [C, L, dim] -> K, V [C, L, d_tab] (what the bank stores)."""
+        return self.w_k(tokens), self.w_v(tokens)
+
+    def forward(self, q, K, V, key_mask, t_eot):
+        """q [M, d_tab]; K, V [C, L, d_tab]; key_mask [C, L]; t_eot [C, dim] -> t_hat [M, C, dim]."""
+        M, (C, L, d_tab) = q.shape[0], K.shape
+        h, d = self.heads, d_tab // self.heads
+        qh, Kh, Vh = q.view(M, h, d), K.view(C, L, h, d).float(), V.view(C, L, h, d).float()
+        scores = torch.einsum('mhd,clhd->mchl', qh, Kh) / d ** 0.5
+        scores = scores.masked_fill(~key_mask[None, :, None, :], float('-inf'))
+        out = torch.einsum('mchl,clhd->mchd', torch.softmax(scores, dim=-1), Vh).reshape(M, C, d_tab)
+        return t_eot[None] + self.w_o(out)
+
+
 # ----------------------------------------------------------------------------- data
 def load_dataset(image_dir, masks_dir, num_ids=None):
     """Market-1501 train split (Market1501.process_dir id parsing) with PifPaf masks.
@@ -380,31 +448,38 @@ def supcon(anchors, cols, a_labels, c_labels, pos_mask=None, exclude=None):
 
     pos_mask [A,B] overrides the default positive set (label equality); exclude [A,B] removes columns from
     the softmax altogether (used to keep an identity's out-of-batch images out of both numerator and
-    denominator).
+    denominator). cols may be [A,B,D]: one (image-conditioned) column vector per row, scored row-wise.
     """
-    if CONTRAST_NORMALIZE:
+    if cols.dim() == 3:
+        logits = torch.einsum('md,mcd->mc', F.normalize(anchors, dim=-1), F.normalize(cols, dim=-1)) / CONTRAST_TEMP
+    elif CONTRAST_NORMALIZE:
         logits = F.normalize(anchors, dim=-1) @ F.normalize(cols, dim=-1).t() / CONTRAST_TEMP
     else:
         logits = anchors @ cols.t()
+    mask = (a_labels[:, None] == c_labels[None, :]) if pos_mask is None else pos_mask
+    return supcon_from_logits(logits, mask, exclude)
+
+
+def supcon_from_logits(logits, pos_mask, exclude=None):
+    """SupCon on a precomputed [A,B] logit matrix (see supcon)."""
     if exclude is not None:
         logits = logits.masked_fill(exclude, float('-inf'))
     logits = logits - logits.max(dim=1, keepdim=True)[0].detach()
-    mask = (a_labels[:, None] == c_labels[None, :]) if pos_mask is None else pos_mask
     log_prob = logits - torch.logsumexp(logits, dim=1, keepdim=True)
-    pos_log_prob = torch.where(mask, log_prob, torch.zeros_like(log_prob))
-    return -(pos_log_prob.sum(1) / mask.sum(1).clamp(min=1)).mean()
+    pos_log_prob = torch.where(pos_mask, log_prob, torch.zeros_like(log_prob))
+    return -(pos_log_prob.sum(1) / pos_mask.sum(1).clamp(min=1)).mean()
 
 
 def build_slot_image_pools(img_feats, labels, vis):
     """Per slot, the dataset-wide pool of image embeddings whose part is visible:
-    [(feats [Ns,D], labels [Ns], column_of_image [N] with -1 for images outside the pool)].
+    [(feats [Ns,D], labels [Ns], column_of_image [N] with -1 for images outside the pool, image_of_column [Ns])].
     Static because the image side is frozen and its features are cached."""
     pools = []
     for s in range(S):
         keep = vis[:, s]
         column = torch.full((labels.shape[0],), -1, dtype=torch.long, device=labels.device)
         column[keep] = torch.arange(int(keep.sum()), device=labels.device)
-        pools.append((img_feats[keep, s].detach(), labels[keep], column))
+        pools.append((img_feats[keep, s].detach(), labels[keep], column, keep.nonzero().squeeze(1)))
     return pools
 
 
@@ -432,7 +507,7 @@ def t2i_loss_floor(pools, num_class):
     if T2I_BATCH_POSITIVES:
         return [0.0] * len(pools)
     floors = []
-    for _, lbl, _ in pools:
+    for _, lbl, _, _ in pools:
         counts = torch.bincount(lbl, minlength=num_class).float()
         counts = counts[counts > 0]
         floors.append(float(torch.log(counts.mean())) if counts.numel() else 0.0)
@@ -450,7 +525,70 @@ def build_text_bank(prompt_learner, text_encoder, num_class, batch=96):
     return bank
 
 
-def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger, resume=None):
+@torch.no_grad()
+def build_tab_bank(prompt_learner, text_encoder, tab, num_class, batch=48):
+    """Detached TAB keys/values of every identity and slot: K, V [C, K+1, 77, TAB_DIM] (fp16) and key masks
+    [C, K+1, 77]; the EOT bank (build_text_bank) supplies the residual."""
+    Ks, Vs, Ms = [], [], []
+    for i in range(0, num_class, batch):
+        lab = torch.arange(i, min(i + batch, num_class), device=DEVICE)
+        tokens, _, kmask = encode_text_tokens(prompt_learner, text_encoder, lab, list(range(S)))
+        Kb, Vb = tab.kv(tokens)
+        Ks.append(Kb.view(len(lab), S, *Kb.shape[1:]).half()); Vs.append(Vb.view(len(lab), S, *Vb.shape[1:]).half())
+        Ms.append(kmask.view(len(lab), S, -1))
+    return torch.cat(Ks), torch.cat(Vs), torch.cat(Ms)
+
+
+def tab_losses(tab, tab_bank, text_bank_s, bank_labels, img_s, img_g, tgt, uniq, tokens_uniq, text_uniq, kmask_uniq,
+               s, pool, batch_columns, img_feats, chunk=16):
+    """TAB auxiliary contrast for one slot, both directions, with image-conditioned prompts.
+    i2t: batch images vs all C prompts (bank K/V; in-batch identities spliced in fresh, with gradient).
+    t2i: each in-batch prompt vs its batch positives + TAB_T2I_POOL sampled pool images, every column scored with
+    the prompt as conditioned by that image; same-identity images outside the batch are excluded (T2I_BATCH_POSITIVES rule)."""
+    Kb, Vb, Mb = tab_bank
+    Ku, Vu = tab.kv(tokens_uniq)
+    K_cols = Kb[:, s].float().index_copy(0, uniq, Ku)
+    V_cols = Vb[:, s].float().index_copy(0, uniq, Vu)
+    M_cols = Mb[:, s].index_copy(0, uniq, kmask_uniq)
+    t_eot_cols = text_bank_s.index_copy(0, uniq, text_uniq)
+    t_hat = tab(tab.query(img_s, img_g), K_cols, V_cols, M_cols, t_eot_cols)
+    loss_i2t = supcon(img_s, t_hat, tgt, bank_labels)
+
+    pool_feats, pool_labels, _, pool_index = pool
+    neg = torch.randperm(pool_feats.shape[0], device=DEVICE)[:min(TAB_T2I_POOL, pool_feats.shape[0])]
+    cols = torch.unique(torch.cat([batch_columns, neg]))
+    x_cols, lab_cols = pool_feats[cols], pool_labels[cols]
+    q_cols = tab.query(x_cols, img_feats[pool_index[cols], 0])
+    in_batch = torch.isin(cols, batch_columns)
+    logits = []
+    for i in range(0, uniq.shape[0], chunk):
+        t_hat_c = tab(q_cols, Ku[i:i + chunk], Vu[i:i + chunk], kmask_uniq[i:i + chunk], text_uniq[i:i + chunk])
+        logits.append(torch.einsum('jd,jud->uj', F.normalize(x_cols, dim=-1), F.normalize(t_hat_c, dim=-1)) / CONTRAST_TEMP)
+    logits = torch.cat(logits)
+    same = uniq[:, None] == lab_cols[None, :]
+    loss_t2i = supcon_from_logits(logits, same & in_batch[None], same & ~in_batch[None])
+    return loss_i2t + loss_t2i
+
+
+@torch.no_grad()
+def slot_accuracy_tab(img_feats, labels, vis, tab, text_all, tab_bank, chunk=128):
+    """Image -> text top-1 per slot with image-conditioned prompts t_hat (diagnostic; stage 2 never sees these)."""
+    Kb, Vb, Mb = tab_bank
+    acc = {}
+    for s, name in enumerate(SLOT_NAMES):
+        keep = vis[:, s].nonzero().squeeze(1)
+        hits = 0
+        for i in range(0, len(keep), chunk):
+            idx = keep[i:i + chunk]
+            q = tab.query(img_feats[idx, s], img_feats[idx, 0])
+            t_hat = tab(q, Kb[:, s], Vb[:, s], Mb[:, s], text_all[:, s])
+            sims = torch.einsum('md,mcd->mc', F.normalize(img_feats[idx, s], dim=-1), F.normalize(t_hat, dim=-1))
+            hits += (sims.argmax(1) == labels[idx]).sum().item()
+        acc[name] = hits / max(len(keep), 1)
+    return acc
+
+
+def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger, resume=None, tab=None):
     """CLIP-ReID stage 1 per slot (processor_clipreid_stage1.py:56-97) on cached image features.
 
     Negative pool (FULL_POOL_NEGATIVES): both directions contrast against the whole dataset instead of the
@@ -470,7 +608,8 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
     `resume` = a checkpoint dict saved by this script: training restarts at its epoch + 1 with the same
     warmup-cosine schedule; the Adam state is restored when the checkpoint has it."""
     xent = SupConLoss(DEVICE)
-    optimizer = torch.optim.Adam(prompt_learner.parameters(), lr=BASE_LR, weight_decay=WEIGHT_DECAY)
+    params = list(prompt_learner.parameters()) + (list(tab.parameters()) if tab is not None else [])
+    optimizer = torch.optim.Adam(params, lr=BASE_LR, weight_decay=WEIGHT_DECAY)
     scheduler = create_scheduler(optimizer, num_epochs=MAX_EPOCHS, lr_min=LR_MIN,
                                  warmup_lr_init=WARMUP_LR_INIT, warmup_t=WARMUP_EPOCHS, noise_range=None)
     start_epoch = 1
@@ -492,7 +631,11 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
     all_start = time.monotonic()
     logger.info('start training')
     slot_meters = [AverageMeter() for _ in range(S)]
-    i2t_meter, t2i_meter = AverageMeter(), AverageMeter()
+    i2t_meter, t2i_meter, tab_meter = AverageMeter(), AverageMeter(), AverageMeter()
+    tab_bank = None
+    if tab is not None:
+        logger.info('TAB enabled: image-conditioned auxiliary contrast, weight {}, d={} heads={} t2i pool {} | trainable TAB params {:,}'
+                    .format(TAB_W, TAB_DIM, TAB_HEADS, TAB_T2I_POOL, sum(p.numel() for p in tab.parameters())))
     floors = t2i_loss_floor(slot_pools, num_class) if FULL_POOL_NEGATIVES else [0.0] * S
     total_floor = sum(floors)
     if FULL_POOL_NEGATIVES and not T2I_BATCH_POSITIVES:
@@ -505,12 +648,15 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
         loss_meter.reset()
         i2t_meter.reset()
         t2i_meter.reset()
+        tab_meter.reset()
         for m in slot_meters:
             m.reset()
         scheduler.step(epoch)
         prompt_learner.train()
         if FULL_POOL_NEGATIVES and (text_bank is None or (epoch - start_epoch) % TEXT_BANK_REFRESH == 0):
             text_bank = build_text_bank(prompt_learner, text_encoder, num_class)
+            if tab is not None:
+                tab_bank = build_tab_bank(prompt_learner, text_encoder, tab, num_class)
         iter_list = torch.randperm(num_image, device=DEVICE)
         for i in range(i_ter + 1):
             b_list = iter_list[i * IMS_PER_BATCH:(i + 1) * IMS_PER_BATCH] if i != i_ter else iter_list[i * IMS_PER_BATCH:num_image]
@@ -525,10 +671,13 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
                     continue
                 tgt, img_s = target[keep], img_b[keep, s]
                 uniq, inv = torch.unique(tgt, return_inverse=True)
-                text_uniq = encode_text(prompt_learner, text_encoder, uniq, slots=[s])[:, 0]
+                if tab is not None:
+                    tokens_uniq, text_uniq, kmask_uniq = encode_text_tokens(prompt_learner, text_encoder, uniq, slots=[s])
+                else:
+                    text_uniq = encode_text(prompt_learner, text_encoder, uniq, slots=[s])[:, 0]
                 text_s = text_uniq[inv]
                 if FULL_POOL_NEGATIVES:
-                    pool_feats, pool_labels, column = slot_pools[s]
+                    pool_feats, pool_labels, column, pool_index = slot_pools[s]
                     text_cols = text_bank[:, s].index_copy(0, uniq, text_uniq)
                     loss_i2t = supcon(img_s, text_cols, tgt, bank_labels)
                     if T2I_BATCH_POSITIVES:
@@ -540,49 +689,67 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
                     loss_i2t = xent(img_s, text_s, tgt, tgt)
                     loss_t2i = xent(text_s, img_s, tgt, tgt)
                 loss = loss_i2t + loss_t2i
+                loss_tab = None
+                if tab is not None and FULL_POOL_NEGATIVES:
+                    loss_tab = tab_losses(tab, tab_bank, text_bank[:, s], bank_labels, img_s, img_b[keep, 0], tgt, uniq,
+                                          tokens_uniq, text_uniq, kmask_uniq, s, slot_pools[s], column[b_list[keep]], img_feats)
+                    loss = loss + TAB_W * loss_tab
                 loss.backward()
                 batch_loss += loss.item()
                 if FULL_POOL_NEGATIVES:
                     with torch.no_grad():
                         text_bank[uniq, s] = TEXT_BANK_MOMENTUM * text_bank[uniq, s] + (1 - TEXT_BANK_MOMENTUM) * text_uniq.detach()
+                        if tab is not None:
+                            Kb, Vb = tab.kv(tokens_uniq.detach())
+                            tab_bank[0][uniq, s] = Kb.half(); tab_bank[1][uniq, s] = Vb.half(); tab_bank[2][uniq, s] = kmask_uniq
                 n_keep = int(keep.sum())
                 slot_meters[s].update(loss.item(), n_keep)
                 i2t_meter.update(loss_i2t.item(), n_keep)
                 t2i_meter.update(loss_t2i.item(), n_keep)
+                if loss_tab is not None:
+                    tab_meter.update(loss_tab.item(), n_keep)
             optimizer.step()
             loss_meter.update(batch_loss, len(b_list))
             if (i + 1) % LOG_PERIOD == 0:
                 logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f}, Base Lr: {:.2e}'
                             .format(epoch, i + 1, i_ter + 1, loss_meter.avg, scheduler._get_lr(epoch)[0]))
-        logger.info('Epoch[{}] done. Loss: {:.3f} (i2t {:.3f}, t2i {:.3f}, above floor {:.3f}) per slot {} Base Lr: {:.2e}'
-                    .format(epoch, loss_meter.avg, i2t_meter.avg * S, t2i_meter.avg * S,
+        logger.info('Epoch[{}] done. Loss: {:.3f} (i2t {:.3f}, t2i {:.3f}, tab {:.3f}, above floor {:.3f}) per slot {} Base Lr: {:.2e}'
+                    .format(epoch, loss_meter.avg, i2t_meter.avg * S, t2i_meter.avg * S, tab_meter.avg * S,
                             loss_meter.avg - total_floor, {n: round(m.avg, 3) for n, m in zip(SLOT_NAMES, slot_meters)},
                             scheduler._get_lr(epoch)[0]))
 
         if epoch % EVAL_PERIOD == 0 or epoch == MAX_EPOCHS:
             prompt_learner.eval()
-            acc = slot_accuracy(img_feats, labels, vis, all_text_feats(prompt_learner, text_encoder))
+            text_all = all_text_feats(prompt_learner, text_encoder)
+            acc = slot_accuracy(img_feats, labels, vis, text_all)
             logger.info('Epoch[{}] image->text top-1 per slot: {}'.format(epoch, {k: round(v, 3) for k, v in acc.items()}))
+            if tab is not None:
+                acc_tab = slot_accuracy_tab(img_feats, labels, vis, tab, text_all, build_tab_bank(prompt_learner, text_encoder, tab, num_class))
+                logger.info('Epoch[{}] image->text top-1 per slot, TAB-conditioned (diagnostic): {}'.format(epoch, {k: round(v, 3) for k, v in acc_tab.items()}))
         if epoch % CHECKPOINT_PERIOD == 0 or epoch == MAX_EPOCHS:
             path = os.path.join(OUTPUT_DIR, f'{BACKBONE}_part_prompts_stage1_{epoch}.pth')
             torch.save({'prompt_learner': prompt_learner.state_dict(), 'optimizer': optimizer.state_dict(),
+                        'tab': tab.state_dict() if tab is not None else None,
                         'templates': prompt_learner.templates, 'part_names': PART_NAMES, 'epoch': epoch,
                         'knobs': dict(H=H, W=W, STRIDE=STRIDE, N_CTX=N_CTX, BACKBONE=BACKBONE,
                                       FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, T2I_BATCH_POSITIVES=T2I_BATCH_POSITIVES,
                                       CONTRAST_NORMALIZE=CONTRAST_NORMALIZE, CONTRAST_TEMP=CONTRAST_TEMP,
-                                      TEXT_BANK_MOMENTUM=TEXT_BANK_MOMENTUM, BASE_LR=BASE_LR)}, path)
+                                      TEXT_BANK_MOMENTUM=TEXT_BANK_MOMENTUM, BASE_LR=BASE_LR,
+                                      TAB_ENABLED=TAB_ENABLED, TAB_W=TAB_W, TAB_DIM=TAB_DIM, TAB_HEADS=TAB_HEADS)}, path)
             logger.info(f'saved {path}')
     logger.info('Stage1 running time: {}'.format(timedelta(seconds=time.monotonic() - all_start)))
 
 
 def main():
-    global NUM_IDS, MAX_EPOCHS
+    global NUM_IDS, MAX_EPOCHS, TAB_ENABLED
     parser = argparse.ArgumentParser(description='CLIP-ReID stage 1 with per-part prompts (RN50)')
     parser.add_argument('--num-ids', type=int, default=NUM_IDS, help='limit to the first N identities')
     parser.add_argument('--epochs', type=int, default=MAX_EPOCHS)
     parser.add_argument('--resume', type=str, default='', help='checkpoint saved by this script to continue from')
+    parser.add_argument('--tab', action='store_true', help='enable the Text Attention Block auxiliary contrast (TAB_ENABLED)')
     args = parser.parse_args()
     NUM_IDS, MAX_EPOCHS = args.num_ids, args.epochs
+    TAB_ENABLED = TAB_ENABLED or args.tab
     resume = torch.load(args.resume, map_location=DEVICE) if args.resume else None
 
     torch.manual_seed(SEED)
@@ -593,7 +760,8 @@ def main():
         H=H, W=W, STRIDE=STRIDE, N_CTX=N_CTX, MAX_EPOCHS=MAX_EPOCHS, IMS_PER_BATCH=IMS_PER_BATCH, BASE_LR=BASE_LR,
         WARMUP_LR_INIT=WARMUP_LR_INIT, LR_MIN=LR_MIN, WARMUP_EPOCHS=WARMUP_EPOCHS, WEIGHT_DECAY=WEIGHT_DECAY,
         FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, T2I_BATCH_POSITIVES=T2I_BATCH_POSITIVES, CONTRAST_NORMALIZE=CONTRAST_NORMALIZE,
-        CONTRAST_TEMP=CONTRAST_TEMP, TEXT_BANK_REFRESH=TEXT_BANK_REFRESH, TEXT_BANK_MOMENTUM=TEXT_BANK_MOMENTUM, NUM_IDS=NUM_IDS, IMAGE_DIR=IMAGE_DIR, MASKS_DIR=MASKS_DIR).items()))
+        CONTRAST_TEMP=CONTRAST_TEMP, TEXT_BANK_REFRESH=TEXT_BANK_REFRESH, TEXT_BANK_MOMENTUM=TEXT_BANK_MOMENTUM,
+        TAB_ENABLED=TAB_ENABLED, TAB_W=TAB_W, TAB_DIM=TAB_DIM, TAB_HEADS=TAB_HEADS, TAB_T2I_POOL=TAB_T2I_POOL, NUM_IDS=NUM_IDS, IMAGE_DIR=IMAGE_DIR, MASKS_DIR=MASKS_DIR).items()))
 
     h_res, w_res = (H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1
     clip = load_clip_to_cpu(BACKBONE, h_res, w_res, STRIDE).to(DEVICE).eval()
@@ -612,15 +780,18 @@ def main():
         tuple(img_feats.shape), tuple(vis.shape), dict(zip(SLOT_NAMES, vis.float().mean(0).cpu().numpy().round(3).tolist()))))
 
     prompt_learner = PartPromptLearner(num_class, clip, PART_NAMES).to(DEVICE)
+    tab = TextAttentionBlock().to(DEVICE) if TAB_ENABLED else None
     if resume is not None:
         prompt_learner.load_state_dict(resume['prompt_learner'])
+        if tab is not None and resume.get('tab') is not None:
+            tab.load_state_dict(resume['tab'])
         logger.info(f"loaded {args.resume} (epoch {resume['epoch']})")
     logger.info('templates:\n' + '\n'.join(prompt_learner.templates))
     logger.info('trainable parameters: {:,} (cls_ctx {})'.format(prompt_learner.cls_ctx.numel(), tuple(prompt_learner.cls_ctx.shape)))
     acc = slot_accuracy(img_feats, labels, vis, all_text_feats(prompt_learner, text_encoder))
     logger.info('before training image->text top-1 per slot: {} (chance {:.4f})'.format({k: round(v, 3) for k, v in acc.items()}, 1 / num_class))
 
-    do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger, resume)
+    do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger, resume, tab)
 
 
 if __name__ == '__main__':
