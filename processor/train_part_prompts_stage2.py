@@ -49,7 +49,7 @@ from torch.cuda import amp
 from processor.train_part_prompts_stage1 import (PartPromptLearner, encode_text, supcon, pifpaf_to_masks,
                                                   PART_NAMES, K, S, SLOT_NAMES)
 from model.make_model_clipreid import load_clip_to_cpu, TextEncoder, weights_init_kaiming, weights_init_classifier
-from datasets.market1501 import Market1501
+from datasets.part_datasets import DATASETS, build_dataset, mask_path, resolve_masks
 from datasets.sampler import RandomIdentitySampler
 from datasets.bases import ImageDataset, read_image
 from datasets.make_dataloader_clipreid import val_collate_fn
@@ -63,9 +63,11 @@ from utils.meter import AverageMeter
 
 # ----------------------------------------------------------------------------- knobs
 DATA_ROOT = '../../datasets'
-MASKS_DIR = f'{DATA_ROOT}/market1501/masks/pifpaf_maskrcnn_filtering/bounding_box_train'
-OUTPUT_DIR = './work_dirs/market1501/part_prompts_stage2'
-STAGE1_CKPT = './work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_60.pth'
+DATASET = 'market1501'             # market1501 | msmt17 | dukemtmc (datasets/part_datasets.py); --dataset overrides,
+                                   # and it must match the dataset the stage-1 prompts were learnt on. Train-split
+                                   # PifPaf masks are resolved from the name (see stage 1); query/gallery need none.
+OUTPUT_DIR = './work_dirs/{dataset}/part_prompts_stage2'
+STAGE1_CKPT = './work_dirs/{dataset}/part_prompts_stage1/RN50_part_prompts_stage1_60.pth'
 
 BACKBONE = 'RN50'
 H, W = 256, 128                    # CLIP-ReID RN50 recipe (cnn_clipreid.yml); must match the stage-1 checkpoint
@@ -144,9 +146,9 @@ class PartImageDataset(Dataset):
     erased regions become background in the mask (BPBreID mask_fill_value=0 -> argmax = background).
     """
 
-    def __init__(self, dataset, masks_dir):
+    def __init__(self, dataset, dataset_dir, masks_dir):
         self.dataset = dataset
-        self.masks_dir = masks_dir
+        self.dataset_dir, self.masks_dir = dataset_dir, masks_dir
         self.normalize = T.Normalize(PIXEL_MEAN, PIXEL_STD)
 
     def __len__(self):
@@ -173,9 +175,8 @@ class PartImageDataset(Dataset):
 
     def __getitem__(self, index):
         img_path, pid, camid, _ = self.dataset[index]
-        stem = os.path.splitext(os.path.basename(img_path))[0]
         img = TF.to_tensor(TF.resize(read_image(img_path), [H, W], interpolation=T.InterpolationMode.BICUBIC))
-        mask = pifpaf_to_masks(np.load(f'{self.masks_dir}/{stem}.npy'))
+        mask = pifpaf_to_masks(np.load(mask_path(img_path, self.dataset_dir, self.masks_dir)))
         mask = F.interpolate(mask[None], (H, W), mode='bilinear', align_corners=True)[0]
         if random.random() < FLIP_PROB:
             img, mask = img.flip(-1), mask.flip(-1)
@@ -191,8 +192,8 @@ class PartImageDataset(Dataset):
         return img, mask, pid, camid
 
 
-def make_loaders(dataset, batch):
-    train_set = PartImageDataset(dataset.train, MASKS_DIR)
+def make_loaders(dataset, dataset_dir, masks_dir, batch):
+    train_set = PartImageDataset(dataset.train, dataset_dir, masks_dir)
     train_loader = DataLoader(train_set, batch_size=batch,
                               sampler=RandomIdentitySampler(dataset.train, batch, NUM_INSTANCE),
                               num_workers=NUM_WORKERS, drop_last=True)
@@ -676,6 +677,8 @@ def build_text_targets(clip, num_classes, stage1_ckpt, logger):
     ckpt = torch.load(stage1_ckpt, map_location=DEVICE)
     knobs = ckpt['knobs']
     assert (knobs['H'], knobs['W'], knobs['STRIDE']) == (H, W, STRIDE), f'stage-1 knobs {knobs} != stage-2 {(H, W, STRIDE)}'
+    assert knobs.get('DATASET', 'market1501') == DATASET, \
+        f"stage-1 prompts are for {knobs.get('DATASET', 'market1501')}, stage 2 is running {DATASET}"
     assert ckpt['part_names'] == PART_NAMES
     prompt_learner = PartPromptLearner(num_classes, clip, PART_NAMES, n_ctx=knobs['N_CTX']).to(DEVICE)
     prompt_learner.load_state_dict(ckpt['prompt_learner'])
@@ -783,11 +786,12 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
 
 
 def main():
-    global MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD, TEXT_ERASE_PROB, TEXT_DROPOUT
+    global MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD, TEXT_ERASE_PROB, TEXT_DROPOUT, DATASET, OUTPUT_DIR
     global RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2, RERANK_LAMBDA, RERANK_LOCAL_W
     global RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE
     parser = argparse.ArgumentParser(description='CLIP-ReID stage 2 with per-part prompts (RN50)')
-    parser.add_argument('--stage1-ckpt', type=str, default=STAGE1_CKPT)
+    parser.add_argument('--dataset', choices=list(DATASETS), default=DATASET)
+    parser.add_argument('--stage1-ckpt', type=str, default='')
     parser.add_argument('--epochs', type=int, default=MAX_EPOCHS)
     parser.add_argument('--batch', type=int, default=IMS_PER_BATCH)
     parser.add_argument('--eval-period', type=int, default=EVAL_PERIOD)
@@ -808,7 +812,9 @@ def main():
     parser.add_argument('--rerank-every-eval', action='store_true', default=RERANK_EVERY_EVAL)
     parser.add_argument('--rerank-device', type=str, default=RERANK_DEVICE, help="'cpu' if the [N,N] matmul will not fit")
     args = parser.parse_args()
-    MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD = args.epochs, args.batch, args.eval_period
+    MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD, DATASET = args.epochs, args.batch, args.eval_period, args.dataset
+    OUTPUT_DIR = OUTPUT_DIR.format(dataset=DATASET)
+    args.stage1_ckpt = args.stage1_ckpt or STAGE1_CKPT.format(dataset=DATASET)
     TEXT_ERASE_PROB, TEXT_DROPOUT = args.text_erase_prob, args.text_dropout
     RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2 = args.rerank, args.rerank_feature, args.rerank_k1, args.rerank_k2
     RERANK_LAMBDA, RERANK_LOCAL_W = args.rerank_lambda, args.rerank_local_w
@@ -819,7 +825,7 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     logger = setup_logger('transreid', OUTPUT_DIR, if_train=not args.eval_only)
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
-        H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
+        DATASET=DATASET, H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
         STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, LPIM_ID_W=LPIM_ID_W, LPIM_TRI_W=LPIM_TRI_W, PART_TRI_W=PART_TRI_W,
         SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, TEXT_ERASE_PROB=TEXT_ERASE_PROB, TEXT_DROPOUT=TEXT_DROPOUT, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
         MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
@@ -828,9 +834,10 @@ def main():
         RERANK_LAMBDA=RERANK_LAMBDA, RERANK_LOCAL_W=RERANK_LOCAL_W, RERANK_ONLY_LOCAL=RERANK_ONLY_LOCAL,
         RERANK_EVERY_EVAL=RERANK_EVERY_EVAL).items()))
 
-    dataset = Market1501(root=DATA_ROOT)
+    dataset, dataset_dir = build_dataset(DATASET, DATA_ROOT)
+    masks_dir = resolve_masks(DATASET, dataset, dataset_dir, logger.info, require=not args.eval_only)
     num_classes, num_query = dataset.num_train_pids, len(dataset.query)
-    train_loader, val_loader = make_loaders(dataset, IMS_PER_BATCH)
+    train_loader, val_loader = make_loaders(dataset, dataset_dir, masks_dir, IMS_PER_BATCH)
 
     h_res, w_res = (H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1
     clip = load_clip_to_cpu(BACKBONE, h_res, w_res, STRIDE).to(DEVICE)
