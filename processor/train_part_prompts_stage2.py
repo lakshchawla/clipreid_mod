@@ -20,6 +20,10 @@ What stage 2 does here
 * Evaluation (every EVAL_PERIOD epochs), mAP / R1 / R5 / R10 for: clipreid_baseline (cat(gap4, g)), lpim
   (cat(z0, pbar)), holistic (cat(gap4, g, z0, pbar)), part_lse (LSE over mutually visible parts) and, with
   FUSE_W > 0, fused. Per-part invisible rate and unmatched-pair statistics are logged.
+* --rerank adds two test-time rows (no training change): <row>_rr = k-reciprocal re-ranking (Zhong et al.
+  CVPR'17, utils/reranking.py) on RERANK_FEATURE, and <row>_rr_lse = the same with the all-pairs part-LSE
+  distance passed as `local_distmat`, so part visibility shapes the k-reciprocal neighbourhood itself rather
+  than being fused into the final score (FUSE_W). See rerank_rows / part_lse_all_pairs.
 * Optimiser / schedule / AMP = SOLVER.STAGE2 of configs/person/cnn_clipreid.yml, 256x128 as in the recipe.
 """
 import os
@@ -27,6 +31,7 @@ import sys
 import math
 import time
 import random
+import resource
 import argparse
 from datetime import timedelta
 
@@ -52,6 +57,7 @@ from loss.softmax_loss import CrossEntropyLabelSmooth
 from loss.triplet_loss import euclidean_dist
 from solver.lr_scheduler import WarmupMultiStepLR
 from utils.metrics import eval_func, euclidean_distance
+from utils.reranking import re_ranking
 from utils.logger import setup_logger
 from utils.meter import AverageMeter
 
@@ -100,6 +106,20 @@ EVAL_SLOTWISE_NORM = True          # holistic vector: L2-normalise each slot bef
                                    # holistic_vector). False restores the CLIP-ReID convention of a single
                                    # normalisation over the concatenation. Eval-only, no retraining needed.
 EVAL_CHUNK = 2048
+
+RERANK = False                     # k-reciprocal re-ranking (Zhong et al. CVPR'17, utils/reranking.py). Test-time
+                                   # only: it changes no gradient and no checkpoint, so --rerank can be added to
+                                   # any --eval-only run over a finished stage-2 model.
+RERANK_FEATURE = 'holistic'        # eval row to re-rank: 'holistic' | 'lpim' | 'clipreid_baseline'
+RERANK_K1, RERANK_K2, RERANK_LAMBDA = 50, 15, 0.3     # utils/metrics.py:126 (the CVPR'17 paper uses 20, 6, 0.3)
+RERANK_LOCAL_W = 1.0               # weight of the part-LSE distance inside the k-reciprocal neighbourhood, after
+                                   # mean-ratio scaling (see rerank_rows). 0 reproduces the plain row.
+RERANK_ONLY_LOCAL = False          # extra row: k-reciprocal on the part-LSE distance alone (free once it is computed)
+RERANK_EVERY_EVAL = False          # False = only the last epoch / --eval-only. Measured on Market (N = 19,281):
+                                   # ~2 min per re_ranking call, ~11 GB peak RSS and 2 GB VRAM for the block
+RERANK_CHUNK = 512                 # gallery chunk of the all-pairs part distance (EVAL_CHUNK needs ~0.8 GB of VRAM)
+RERANK_DEVICE = None               # None = DEVICE; 'cpu' when the [N,N] matmul does not fit next to the model
+
 CHECKPOINT_PERIOD, EVAL_PERIOD, LOG_PERIOD = 20, 2, 50
 SEED = 1234
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -520,6 +540,63 @@ def part_lse_distmat(qp, qv, gp, gv, gamma=LSE_GAMMA, chunk=EVAL_CHUNK):
     return D.numpy(), unmatched.numpy(), valid.numpy()
 
 
+@torch.no_grad()
+def part_lse_all_pairs(p, v, gamma=LSE_GAMMA, chunk=RERANK_CHUNK, device=None):
+    """All-pairs part distance over query+gallery: [N, N] float16, same metric as part_lse_distmat.
+
+    re_ranking adds `local_distmat` to its own all-pairs `original_dist` *before* the k-reciprocal
+    neighbourhood is built, so the local matrix has to span query+gallery, not the [Nq, Ng] block that
+    part_lse_distmat returns. Pairs with no mutually visible part get max + 1, as there. float16 and no
+    unmatched/valid bookkeeping: on Market N = 19,281, so each [N, N] float32 array costs 1.5 GB.
+    """
+    device = device or RERANK_DEVICE or DEVICE
+    p, v = p.to(device), v.to(device)
+    cols, max_valid = [], 0.0
+    for i in range(0, p.shape[0], chunk):
+        d, M = part_pairwise_distances(p, v, p[i:i + chunk], v[i:i + chunk])
+        D, valid, _ = lse_combine(d, M, gamma)
+        if valid.any():
+            max_valid = max(max_valid, D[valid].max().item())
+        cols.append(torch.where(valid, D, torch.full_like(D, -1.0)).half().cpu())   # -1 = no shared part
+    D = torch.cat(cols, 1)
+    D[D < 0] = max_valid + 1
+    return D.numpy()
+
+
+def rerank_rows(feats, num_query, global_dist, logger):
+    """The k-reciprocal rows: plain, and with the part-LSE distance inside the neighbourhood.
+
+    `<feature>_rr` is re_ranking on the chosen retrieval vector. `<feature>_rr_lse` passes the all-pairs part
+    distance as `local_distmat`, so the Jaccard neighbourhood is built from the global *and* the part-visibility
+    distance instead of fusing two finished rankings (which is what FUSE_W does). The local matrix is rescaled to
+    the mean of the global one first: re_ranking sums the two raw matrices and only normalises afterwards, while
+    the global side is a squared euclidean on unit vectors (0..4) and the part side is 1 - cos (0..2);
+    `global_dist` is the row's own [Nq, Ng] distmat, already computed by evaluate().
+    """
+    vec = {'clipreid_baseline': lambda f: F.normalize(torch.cat([f['gap4'], f['g']], dim=1), dim=1),
+           'lpim': lambda f: concat_feature(f['z0'], f['pbar']),
+           'holistic': lambda f: concat_feature(f['gap4'], f['g'], f['z0'], f['pbar'])}[RERANK_FEATURE](feats)
+    device = RERANK_DEVICE or DEVICE
+    qf, gf = vec[:num_query].to(device), vec[num_query:].to(device)
+    rows, start = {}, time.time()
+    rows[f'{RERANK_FEATURE}_rr'] = re_ranking(qf, gf, RERANK_K1, RERANK_K2, RERANK_LAMBDA)
+
+    p, v = part_embeddings_for_lse(feats['z0'], feats['zparts'], feats['vis'])
+    d_lse = part_lse_all_pairs(p, v)
+    scale = RERANK_LOCAL_W * float(global_dist.mean()) / float(d_lse.astype(np.float32).mean())
+    local = d_lse.astype(np.float32) * scale
+    del d_lse                                     # every [N,N] float32 array is 1.5 GB on Market
+    rows[f'{RERANK_FEATURE}_rr_lse'] = re_ranking(qf, gf, RERANK_K1, RERANK_K2, RERANK_LAMBDA, local_distmat=local)
+    if RERANK_ONLY_LOCAL:                         # re_ranking normalises per column, so the scale cancels here
+        rows['part_lse_rr'] = re_ranking(qf, gf, RERANK_K1, RERANK_K2, RERANK_LAMBDA, local_distmat=local, only_local=True)
+    del local
+    logger.info('re-ranking on `{}` (k1={}, k2={}, lambda={}, local_w={} -> scale {:.3f}): {} in {:.0f}s, '
+                'peak RSS {:.1f} GB'.format(RERANK_FEATURE, RERANK_K1, RERANK_K2, RERANK_LAMBDA, RERANK_LOCAL_W,
+                                            scale, ' '.join(rows), time.time() - start,
+                                            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 20))
+    return rows
+
+
 def concat_feature(*slots):
     """Slots concatenated into one retrieval vector. With EVAL_SLOTWISE_NORM each slot is L2-normalised first so
     all slots weigh equally (concatenating then normalising once - CLIP-ReID's convention - weights slots by norm:
@@ -529,7 +606,7 @@ def concat_feature(*slots):
     return F.normalize(torch.cat(slots, dim=1), dim=1)
 
 
-def evaluate(model, val_loader, num_query, logger, tag):
+def evaluate(model, val_loader, num_query, logger, tag, rerank=False):
     f, pids, camids = extract(model, val_loader)
     q, gal = slice(0, num_query), slice(num_query, None)
     q_pids, g_pids, q_cams, g_cams = pids[q], pids[gal], camids[q], camids[gal]
@@ -547,6 +624,8 @@ def evaluate(model, val_loader, num_query, logger, tag):
     results['part_lse'] = d_lse
     if FUSE_W > 0:
         results['fused'] = results['holistic'] / results['holistic'].mean() + FUSE_W * d_lse / d_lse.mean()
+    if rerank:
+        results.update(rerank_rows(f, num_query, results[RERANK_FEATURE], logger))
 
     logger.info(f'Validation Results - {tag}')
     logger.info('invisible rate per part | query: {} | gallery: {}'.format(
@@ -665,7 +744,8 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
             save_checkpoint(model, optimizer, scheduler, epoch, path)
             logger.info(f'saved {path}')
         if epoch % EVAL_PERIOD == 0 or epoch == MAX_EPOCHS:
-            summary = evaluate(model, val_loader, num_query, logger, f'Epoch: {epoch}')
+            summary = evaluate(model, val_loader, num_query, logger, f'Epoch: {epoch}',
+                               rerank=RERANK and (RERANK_EVERY_EVAL or epoch == MAX_EPOCHS))
             for name, m in summary.items():
                 if m['mAP'] > best.get(name, {'mAP': -1})['mAP']:
                     best[name] = dict(epoch=epoch, **m)
@@ -676,6 +756,8 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
 
 def main():
     global MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD
+    global RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2, RERANK_LAMBDA, RERANK_LOCAL_W
+    global RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE
     parser = argparse.ArgumentParser(description='CLIP-ReID stage 2 with per-part prompts (RN50)')
     parser.add_argument('--stage1-ckpt', type=str, default=STAGE1_CKPT)
     parser.add_argument('--epochs', type=int, default=MAX_EPOCHS)
@@ -684,8 +766,20 @@ def main():
     parser.add_argument('--resume', type=str, default='', help='stage-2 checkpoint to continue from')
     parser.add_argument('--eval-only', action='store_true')
     parser.add_argument('--weights', type=str, default='', help='stage-2 checkpoint for --eval-only')
+    parser.add_argument('--rerank', action='store_true', help='k-reciprocal re-ranking rows (test-time only)')
+    parser.add_argument('--rerank-feature', choices=['holistic', 'lpim', 'clipreid_baseline'], default=RERANK_FEATURE)
+    parser.add_argument('--rerank-k1', type=int, default=RERANK_K1)
+    parser.add_argument('--rerank-k2', type=int, default=RERANK_K2)
+    parser.add_argument('--rerank-lambda', type=float, default=RERANK_LAMBDA)
+    parser.add_argument('--rerank-local-w', type=float, default=RERANK_LOCAL_W, help='0 = plain k-reciprocal twice')
+    parser.add_argument('--rerank-only-local', action='store_true', default=RERANK_ONLY_LOCAL)
+    parser.add_argument('--rerank-every-eval', action='store_true', default=RERANK_EVERY_EVAL)
+    parser.add_argument('--rerank-device', type=str, default=RERANK_DEVICE, help="'cpu' if the [N,N] matmul will not fit")
     args = parser.parse_args()
     MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD = args.epochs, args.batch, args.eval_period
+    RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2 = args.rerank, args.rerank_feature, args.rerank_k1, args.rerank_k2
+    RERANK_LAMBDA, RERANK_LOCAL_W = args.rerank_lambda, args.rerank_local_w
+    RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE = args.rerank_only_local, args.rerank_every_eval, args.rerank_device
 
     torch.manual_seed(SEED); np.random.seed(SEED); random.seed(SEED)
     torch.backends.cudnn.benchmark = True
@@ -696,7 +790,10 @@ def main():
         STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, LPIM_ID_W=LPIM_ID_W, LPIM_TRI_W=LPIM_TRI_W, PART_TRI_W=PART_TRI_W,
         SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
         MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
-        BANK_SIZE=BANK_SIZE, BANK_START_EPOCH=BANK_START_EPOCH, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM).items()))
+        BANK_SIZE=BANK_SIZE, BANK_START_EPOCH=BANK_START_EPOCH, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM,
+        RERANK=RERANK, RERANK_FEATURE=RERANK_FEATURE, RERANK_K1=RERANK_K1, RERANK_K2=RERANK_K2,
+        RERANK_LAMBDA=RERANK_LAMBDA, RERANK_LOCAL_W=RERANK_LOCAL_W, RERANK_ONLY_LOCAL=RERANK_ONLY_LOCAL,
+        RERANK_EVERY_EVAL=RERANK_EVERY_EVAL).items()))
 
     dataset = Market1501(root=DATA_ROOT)
     num_classes, num_query = dataset.num_train_pids, len(dataset.query)
@@ -715,7 +812,7 @@ def main():
     if args.eval_only:
         ckpt = torch.load(args.weights, map_location=DEVICE)
         model.load_state_dict(ckpt['model'])
-        evaluate(model, val_loader, num_query, logger, f"{args.weights} (epoch {ckpt['epoch']})")
+        evaluate(model, val_loader, num_query, logger, f"{args.weights} (epoch {ckpt['epoch']})", rerank=RERANK)
         return
 
     resume, start_epoch = None, 1
