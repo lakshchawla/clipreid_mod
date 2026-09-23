@@ -89,6 +89,16 @@ LPIM_ID_W, LPIM_TRI_W = 1.0, 1.0              # ID + triplet on the LPIM global 
 PART_TRI_W = 1.0                              # per-part triplet on z1..zK (visibility-weighted, LSE annealed)
 SUPCON_W = 0.5                                # symmetric SupCon between z_s and the stage-1 identity prompts (PromptSG lambda)
 ATTN_W, VIS_W = 1.0, 0.1                      # attention-map KL to the PifPaf masks; part-presence BCE for the visibility head
+TEXT_ERASE_PROB = 0.1              # random text erasing: per (sample, slot), drop that slot's identity prompt from the
+                                   # SupCon term, and for slot 0 drop the sample from i2t. The text side of Random
+                                   # Erasing (RE_PROB on images): the image slot must stand on its own when its text
+                                   # anchor is missing, which is the occluded-part case. 0 = off; at 0.1, 0.9^6 = 53%
+                                   # of samples keep all six anchors. Ablate {0, 0.1, 0.2, 0.3}.
+TEXT_DROPOUT = 0.1                 # Bernoulli mask over the 1024 text dimensions, rescaled by 1/(1-p), fresh every
+                                   # step and shared across identities within a slot (so every comparison in that slot
+                                   # stays in one sub-space and logits remain comparable across classes). Applies to
+                                   # both text consumers, i2t and SupCon. The LPIM semantic queries are never touched:
+                                   # they are part of the test-time path. 0 = off.
 MARGIN = 0.3
 LSE_GAMMA = 5.0                    # soft-max sharpness over parts (-> max distance as gamma grows)
 LSE_GAMMA_EPOCHS = (40, 80)        # part triplet uses the visibility-weighted mean until epoch 40, then gamma ramps
@@ -459,6 +469,8 @@ class Stage2Loss(nn.Module):
         part_tri = batch-hard triplet on z1..zK, visibility-weighted mean -> LSE as gamma anneals (lse_gamma_at)
         supcon   = mean over slots of the symmetric SupCon between z_s and the batch's stage-1 identity prompts
                    (PromptSG's L_SupCon, batch positives / batch negatives, normalised, CLIP temperature)
+        Random text erasing (training only, erased_text): TEXT_ERASE_PROB drops a (sample, slot) prompt anchor
+        from SupCon and, for slot 0, that sample from i2t; TEXT_DROPOUT masks text embedding dimensions.
         attn     = KL(PifPaf part mask || part attention map), present parts only;  vis = BCE(vis_logit, present)
     loss = ID_W*id + TRI_W*tri + I2T_W*i2t + LPIM_ID_W*lpim_id + LPIM_TRI_W*lpim_tri + PART_TRI_W*part_tri
            + SUPCON_W*supcon + ATTN_W*attn + VIS_W*vis"""
@@ -470,11 +482,27 @@ class Stage2Loss(nn.Module):
         self.part_triplet = PartLSETripletLoss(gamma=0.0)
         self.register_buffer('text_all', text_all)
 
+    def erased_text(self, target):
+        """Random text erasing, training only: a per-slot dimension mask on the frozen prompts (TEXT_DROPOUT) and a
+        per (sample, slot) anchor-erasing mask (TEXT_ERASE_PROB). Returns the masked text_all [C, S, D] and the
+        keep mask [B, S]; both are identities at eval or with the knobs at 0."""
+        text_all, B = self.text_all, target.shape[0]
+        if self.training and TEXT_DROPOUT > 0:
+            m = (torch.rand(S, text_all.shape[-1], device=text_all.device) > TEXT_DROPOUT).float() / (1 - TEXT_DROPOUT)
+            text_all = text_all * m[None]                       # shared across identities within a slot
+        erase = torch.ones(B, S, dtype=torch.bool, device=target.device)
+        if self.training and TEXT_ERASE_PROB > 0:
+            erase = torch.rand(B, S, device=target.device) >= TEXT_ERASE_PROB
+        return text_all, erase
+
     def forward(self, res, masks, target, bank=None):
         terms = {}
+        text_all, erase = self.erased_text(target)
         terms['id'] = self.xent(res['score_gap4'], target) + self.xent(res['score_g'], target)
         terms['tri'] = self.triplet(res['gap3'], target) + self.triplet(res['gap4'], target) + self.triplet(res['g'], target)
-        terms['i2t'] = self.xent(res['g'] @ self.text_all[:, 0].t(), target)
+        keep0 = erase[:, 0]
+        terms['i2t'] = (self.xent(res['g'][keep0] @ text_all[:, 0].t(), target[keep0]) if keep0.any()
+                        else res['g'].sum() * 0)
 
         terms['lpim_id'] = self.xent(res['score_z0'], target) + self.xent(res['score_pbar'], target)
         z0_bank = p_bank = None
@@ -488,10 +516,10 @@ class Stage2Loss(nn.Module):
         p_lse, v_lse = part_embeddings_for_lse(res['z0'], res['zparts'], present)
         terms['part_tri'] = self.part_triplet(p_lse, v_lse, target, p_bank)
 
-        text_b = self.text_all[target]
+        text_b = text_all[target]
         supcon_terms = []
         for s_ in range(S):
-            keep = torch.ones_like(target, dtype=torch.bool) if s_ == 0 else present[:, s_ - 1]
+            keep = erase[:, s_] if s_ == 0 else present[:, s_ - 1] & erase[:, s_]
             if keep.sum() < 2:
                 continue
             z_s, t_s, tgt = res['z'][keep, s_].float(), text_b[keep, s_], target[keep]
@@ -755,7 +783,7 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
 
 
 def main():
-    global MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD
+    global MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD, TEXT_ERASE_PROB, TEXT_DROPOUT
     global RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2, RERANK_LAMBDA, RERANK_LOCAL_W
     global RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE
     parser = argparse.ArgumentParser(description='CLIP-ReID stage 2 with per-part prompts (RN50)')
@@ -766,6 +794,10 @@ def main():
     parser.add_argument('--resume', type=str, default='', help='stage-2 checkpoint to continue from')
     parser.add_argument('--eval-only', action='store_true')
     parser.add_argument('--weights', type=str, default='', help='stage-2 checkpoint for --eval-only')
+    parser.add_argument('--text-erase-prob', type=float, default=TEXT_ERASE_PROB,
+                        help='random text erasing: drop a (sample, slot) identity prompt from i2t / SupCon (0 = off)')
+    parser.add_argument('--text-dropout', type=float, default=TEXT_DROPOUT,
+                        help='Bernoulli dropout over the text embedding dimensions (0 = off)')
     parser.add_argument('--rerank', action='store_true', help='k-reciprocal re-ranking rows (test-time only)')
     parser.add_argument('--rerank-feature', choices=['holistic', 'lpim', 'clipreid_baseline'], default=RERANK_FEATURE)
     parser.add_argument('--rerank-k1', type=int, default=RERANK_K1)
@@ -777,6 +809,7 @@ def main():
     parser.add_argument('--rerank-device', type=str, default=RERANK_DEVICE, help="'cpu' if the [N,N] matmul will not fit")
     args = parser.parse_args()
     MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD = args.epochs, args.batch, args.eval_period
+    TEXT_ERASE_PROB, TEXT_DROPOUT = args.text_erase_prob, args.text_dropout
     RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2 = args.rerank, args.rerank_feature, args.rerank_k1, args.rerank_k2
     RERANK_LAMBDA, RERANK_LOCAL_W = args.rerank_lambda, args.rerank_local_w
     RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE = args.rerank_only_local, args.rerank_every_eval, args.rerank_device
@@ -788,7 +821,7 @@ def main():
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
         H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
         STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, LPIM_ID_W=LPIM_ID_W, LPIM_TRI_W=LPIM_TRI_W, PART_TRI_W=PART_TRI_W,
-        SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
+        SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, TEXT_ERASE_PROB=TEXT_ERASE_PROB, TEXT_DROPOUT=TEXT_DROPOUT, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
         MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
         BANK_SIZE=BANK_SIZE, BANK_START_EPOCH=BANK_START_EPOCH, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM,
         RERANK=RERANK, RERANK_FEATURE=RERANK_FEATURE, RERANK_K1=RERANK_K1, RERANK_K2=RERANK_K2,
