@@ -8,3 +8,5 @@
 /model/backbones/__pycache__
 /model/clip/__pycache__
 /work_dirs
+/deploy/onnx
+__pycache__/
