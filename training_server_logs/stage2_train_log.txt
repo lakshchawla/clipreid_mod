@@ -1,0 +1,911 @@
+2026-09-21 15:15:50,385 transreid INFO: knobs: H=256, W=128, IMS_PER_BATCH=64, NUM_INSTANCE=4, MAX_EPOCHS=120, BASE_LR=0.00035, STEPS=(40, 70), ID_W=1.0, TRI_W=1.0, I2T_W=1.0, PART_TRI_W=1.0, PART_ID_W=0.0, PART_I2T_W=0.5, PIX_W=0.35, MARGIN=0.3, LSE_GAMMA=5.0, LSE_INCLUDE_GLOBAL=False, FUSE_W=0.0, USE_AMP=True, BANK_SIZE=0, BANK_START_EPOCH=5, EVAL_SLOTWISE_NORM=True
+2026-09-21 15:15:52,472 transreid INFO: text targets from work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_60.pth (epoch 60): (751, 6, 1024)
+2026-09-21 15:15:52,528 transreid INFO: trainable parameters: 50,603,878
+2026-09-21 15:15:52,530 transreid INFO: start training
+2026-09-21 15:16:00,120 transreid INFO: Epoch[1] Iteration[50/185] Loss: 32.101 (id 13.226 tri 2.981 i2t 5.346 | part_id 6.586 part_tri 0.345 part_i2t 6.038 pix 1.709) Acc: 0.005, Base Lr: 3.82e-05
+2026-09-21 15:16:05,421 transreid INFO: Epoch[1] Iteration[100/185] Loss: 30.171 (id 13.159 tri 2.662 i2t 4.291 | part_id 6.438 part_tri 0.329 part_i2t 5.485 pix 1.572) Acc: 0.030, Base Lr: 3.82e-05
+2026-09-21 15:16:10,756 transreid INFO: Epoch[1] Iteration[150/185] Loss: 28.691 (id 13.055 tri 2.391 i2t 3.687 | part_id 6.222 part_tri 0.317 part_i2t 5.021 pix 1.457) Acc: 0.064, Base Lr: 3.82e-05
+2026-09-21 15:16:13,667 transreid INFO: Epoch 1 done. Loss: 27.741 Time per batch: 0.115[s] Speed: 554.1[samples/s]
+2026-09-21 15:16:19,356 transreid INFO: Epoch[2] Iteration[50/185] Loss: 24.089 (id 12.357 tri 1.473 i2t 2.469 | part_id 5.150 part_tri 0.248 part_i2t 3.994 pix 1.129) Acc: 0.119, Base Lr: 7.28e-05
+2026-09-21 15:16:24,654 transreid INFO: Epoch[2] Iteration[100/185] Loss: 23.131 (id 12.070 tri 1.414 i2t 2.332 | part_id 4.794 part_tri 0.231 part_i2t 3.804 pix 1.106) Acc: 0.162, Base Lr: 7.28e-05
+2026-09-21 15:16:29,949 transreid INFO: Epoch[2] Iteration[150/185] Loss: 22.102 (id 11.705 tri 1.358 i2t 2.216 | part_id 4.402 part_tri 0.219 part_i2t 3.640 pix 1.091) Acc: 0.202, Base Lr: 7.28e-05
+2026-09-21 15:16:32,847 transreid INFO: Epoch 2 done. Loss: 21.175 Time per batch: 0.105[s] Speed: 610.6[samples/s]
+2026-09-21 15:16:43,649 transreid INFO: Validation Results - Epoch: 2
+2026-09-21 15:16:43,650 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.0010000000474974513, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004999999888241291, 'legs': 0.0, 'feet': 0.014999999664723873} | gallery: {'global': 0.0, 'head': 0.05700000002980232, 'upper_arms_torso': 0.019999999552965164, 'lower_arms_torso': 0.032999999821186066, 'legs': 0.003000000026077032, 'feet': 0.03099999949336052}
+2026-09-21 15:16:43,720 transreid INFO: query-gallery pairs with >=1 unmatched part: 11.6% | with no shared part: 0.08% | mean unmatched parts: 0.16
+2026-09-21 15:16:46,546 transreid INFO: [clipreid_baseline] mAP: 63.0%  Rank-1: 81.5%  Rank-5: 92.0%  Rank-10: 95.4%
+2026-09-21 15:16:49,273 transreid INFO: [holistic         ] mAP: 65.0%  Rank-1: 82.0%  Rank-5: 92.6%  Rank-10: 94.9%
+2026-09-21 15:16:51,951 transreid INFO: [part_lse         ] mAP: 63.3%  Rank-1: 80.6%  Rank-5: 91.7%  Rank-10: 94.4%
+2026-09-21 15:16:52,036 transreid INFO: best so far: clipreid_baseline mAP 63.0% R1 81.5% @epoch 2 | holistic mAP 65.0% R1 82.0% @epoch 2 | part_lse mAP 63.3% R1 80.6% @epoch 2
+2026-09-21 15:16:57,900 transreid INFO: Epoch[3] Iteration[50/185] Loss: 19.035 (id 10.306 tri 1.036 i2t 2.051 | part_id 3.385 part_tri 0.165 part_i2t 3.468 pix 1.020) Acc: 0.221, Base Lr: 1.07e-04
+2026-09-21 15:17:03,166 transreid INFO: Epoch[3] Iteration[100/185] Loss: 18.392 (id 9.917 tri 1.030 i2t 2.031 | part_id 3.179 part_tri 0.166 part_i2t 3.434 pix 1.005) Acc: 0.281, Base Lr: 1.07e-04
+2026-09-21 15:17:08,449 transreid INFO: Epoch[3] Iteration[150/185] Loss: 17.312 (id 9.337 tri 0.986 i2t 1.943 | part_id 2.887 part_tri 0.158 part_i2t 3.303 pix 0.995) Acc: 0.352, Base Lr: 1.07e-04
+2026-09-21 15:17:11,478 transreid INFO: Epoch 3 done. Loss: 16.439 Time per batch: 0.106[s] Speed: 605.7[samples/s]
+2026-09-21 15:17:17,283 transreid INFO: Epoch[4] Iteration[50/185] Loss: 15.860 (id 8.299 tri 0.775 i2t 2.039 | part_id 2.548 part_tri 0.154 part_i2t 3.432 pix 0.937) Acc: 0.396, Base Lr: 1.42e-04
+2026-09-21 15:17:22,595 transreid INFO: Epoch[4] Iteration[100/185] Loss: 14.711 (id 7.647 tri 0.705 i2t 1.926 | part_id 2.332 part_tri 0.144 part_i2t 3.260 pix 0.935) Acc: 0.489, Base Lr: 1.42e-04
+2026-09-21 15:17:27,896 transreid INFO: Epoch[4] Iteration[150/185] Loss: 13.740 (id 7.054 tri 0.664 i2t 1.843 | part_id 2.159 part_tri 0.136 part_i2t 3.117 pix 0.932) Acc: 0.567, Base Lr: 1.42e-04
+2026-09-21 15:17:30,884 transreid INFO: Epoch 4 done. Loss: 12.987 Time per batch: 0.105[s] Speed: 606.9[samples/s]
+2026-09-21 15:17:41,306 transreid INFO: Validation Results - Epoch: 4
+2026-09-21 15:17:41,306 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.13099999725818634, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.02500000037252903, 'legs': 0.0010000000474974513, 'feet': 0.019999999552965164} | gallery: {'global': 0.0, 'head': 0.21199999749660492, 'upper_arms_torso': 0.026000000536441803, 'lower_arms_torso': 0.07500000298023224, 'legs': 0.009999999776482582, 'feet': 0.054999999701976776}
+2026-09-21 15:17:41,369 transreid INFO: query-gallery pairs with >=1 unmatched part: 39.6% | with no shared part: 0.31% | mean unmatched parts: 0.52
+2026-09-21 15:17:44,219 transreid INFO: [clipreid_baseline] mAP: 67.1%  Rank-1: 83.0%  Rank-5: 93.3%  Rank-10: 95.4%
+2026-09-21 15:17:46,977 transreid INFO: [holistic         ] mAP: 68.3%  Rank-1: 84.1%  Rank-5: 93.1%  Rank-10: 95.8%
+2026-09-21 15:17:49,796 transreid INFO: [part_lse         ] mAP: 64.5%  Rank-1: 80.8%  Rank-5: 91.9%  Rank-10: 94.7%
+2026-09-21 15:17:49,896 transreid INFO: best so far: clipreid_baseline mAP 67.1% R1 83.0% @epoch 4 | holistic mAP 68.3% R1 84.1% @epoch 4 | part_lse mAP 64.5% R1 80.8% @epoch 4
+2026-09-21 15:17:55,827 transreid INFO: Epoch[5] Iteration[50/185] Loss: 12.684 (id 6.251 tri 0.577 i2t 1.844 | part_id 1.977 part_tri 0.132 part_i2t 3.170 pix 0.911) Acc: 0.610, Base Lr: 1.77e-04
+2026-09-21 15:18:01,103 transreid INFO: Epoch[5] Iteration[100/185] Loss: 12.040 (id 5.786 tri 0.571 i2t 1.789 | part_id 1.916 part_tri 0.129 part_i2t 3.063 pix 0.907) Acc: 0.685, Base Lr: 1.77e-04
+2026-09-21 15:18:06,338 transreid INFO: Epoch[5] Iteration[150/185] Loss: 11.381 (id 5.321 tri 0.570 i2t 1.733 | part_id 1.828 part_tri 0.129 part_i2t 2.967 pix 0.906) Acc: 0.739, Base Lr: 1.77e-04
+2026-09-21 15:18:09,273 transreid INFO: Epoch 5 done. Loss: 10.842 Time per batch: 0.106[s] Speed: 604.4[samples/s]
+2026-09-21 15:18:15,086 transreid INFO: Epoch[6] Iteration[50/185] Loss: 11.230 (id 4.992 tri 0.593 i2t 1.822 | part_id 1.810 part_tri 0.135 part_i2t 3.126 pix 0.900) Acc: 0.752, Base Lr: 2.11e-04
+2026-09-21 15:18:20,391 transreid INFO: Epoch[6] Iteration[100/185] Loss: 10.642 (id 4.608 tri 0.566 i2t 1.763 | part_id 1.765 part_tri 0.128 part_i2t 2.995 pix 0.900) Acc: 0.799, Base Lr: 2.11e-04
+2026-09-21 15:18:25,634 transreid INFO: Epoch[6] Iteration[150/185] Loss: 10.074 (id 4.271 tri 0.533 i2t 1.700 | part_id 1.699 part_tri 0.122 part_i2t 2.865 pix 0.902) Acc: 0.833, Base Lr: 2.11e-04
+2026-09-21 15:18:28,565 transreid INFO: Epoch 6 done. Loss: 9.643 Time per batch: 0.105[s] Speed: 607.1[samples/s]
+2026-09-21 15:18:38,958 transreid INFO: Validation Results - Epoch: 6
+2026-09-21 15:18:38,958 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.49799999594688416, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.07699999958276749, 'legs': 0.0010000000474974513, 'feet': 0.03700000047683716} | gallery: {'global': 0.0, 'head': 0.5529999732971191, 'upper_arms_torso': 0.05999999865889549, 'lower_arms_torso': 0.1679999977350235, 'legs': 0.010999999940395355, 'feet': 0.09000000357627869}
+2026-09-21 15:18:39,021 transreid INFO: query-gallery pairs with >=1 unmatched part: 82.0% | with no shared part: 0.71% | mean unmatched parts: 1.20
+2026-09-21 15:18:41,890 transreid INFO: [clipreid_baseline] mAP: 71.2%  Rank-1: 87.2%  Rank-5: 95.5%  Rank-10: 97.0%
+2026-09-21 15:18:44,604 transreid INFO: [holistic         ] mAP: 71.8%  Rank-1: 87.6%  Rank-5: 95.1%  Rank-10: 96.9%
+2026-09-21 15:18:47,328 transreid INFO: [part_lse         ] mAP: 66.4%  Rank-1: 82.2%  Rank-5: 93.2%  Rank-10: 95.7%
+2026-09-21 15:18:47,445 transreid INFO: best so far: clipreid_baseline mAP 71.2% R1 87.2% @epoch 6 | holistic mAP 71.8% R1 87.6% @epoch 6 | part_lse mAP 66.4% R1 82.2% @epoch 6
+2026-09-21 15:18:53,348 transreid INFO: Epoch[7] Iteration[50/185] Loss: 9.659 (id 4.002 tri 0.437 i2t 1.679 | part_id 1.678 part_tri 0.108 part_i2t 2.887 pix 0.893) Acc: 0.848, Base Lr: 2.46e-04
+2026-09-21 15:18:58,481 transreid INFO: Epoch[7] Iteration[100/185] Loss: 9.351 (id 3.791 tri 0.438 i2t 1.643 | part_id 1.653 part_tri 0.106 part_i2t 2.811 pix 0.896) Acc: 0.870, Base Lr: 2.46e-04
+2026-09-21 15:19:03,590 transreid INFO: Epoch[7] Iteration[150/185] Loss: 9.018 (id 3.592 tri 0.436 i2t 1.609 | part_id 1.607 part_tri 0.106 part_i2t 2.707 pix 0.897) Acc: 0.892, Base Lr: 2.46e-04
+2026-09-21 15:19:06,669 transreid INFO: Epoch 7 done. Loss: 8.759 Time per batch: 0.104[s] Speed: 612.6[samples/s]
+2026-09-21 15:19:12,802 transreid INFO: Epoch[8] Iteration[50/185] Loss: 9.504 (id 3.642 tri 0.468 i2t 1.773 | part_id 1.700 part_tri 0.119 part_i2t 2.972 pix 0.900) Acc: 0.883, Base Lr: 2.81e-04
+2026-09-21 15:19:17,926 transreid INFO: Epoch[8] Iteration[100/185] Loss: 9.225 (id 3.506 tri 0.469 i2t 1.710 | part_id 1.675 part_tri 0.119 part_i2t 2.863 pix 0.898) Acc: 0.901, Base Lr: 2.81e-04
+2026-09-21 15:19:23,043 transreid INFO: Epoch[8] Iteration[150/185] Loss: 8.939 (id 3.373 tri 0.469 i2t 1.659 | part_id 1.631 part_tri 0.117 part_i2t 2.748 pix 0.903) Acc: 0.914, Base Lr: 2.81e-04
+2026-09-21 15:19:26,094 transreid INFO: Epoch 8 done. Loss: 8.666 Time per batch: 0.106[s] Speed: 606.2[samples/s]
+2026-09-21 15:19:36,460 transreid INFO: Validation Results - Epoch: 8
+2026-09-21 15:19:36,460 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.5889999866485596, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0560000017285347, 'legs': 0.0020000000949949026, 'feet': 0.039000000804662704} | gallery: {'global': 0.0, 'head': 0.6039999723434448, 'upper_arms_torso': 0.032999999821186066, 'lower_arms_torso': 0.11900000274181366, 'legs': 0.010999999940395355, 'feet': 0.07800000160932541}
+2026-09-21 15:19:36,523 transreid INFO: query-gallery pairs with >=1 unmatched part: 86.6% | with no shared part: 0.49% | mean unmatched parts: 1.17
+2026-09-21 15:19:39,404 transreid INFO: [clipreid_baseline] mAP: 70.5%  Rank-1: 86.8%  Rank-5: 94.9%  Rank-10: 97.1%
+2026-09-21 15:19:42,142 transreid INFO: [holistic         ] mAP: 71.7%  Rank-1: 87.6%  Rank-5: 95.2%  Rank-10: 97.1%
+2026-09-21 15:19:44,879 transreid INFO: [part_lse         ] mAP: 66.8%  Rank-1: 82.2%  Rank-5: 92.7%  Rank-10: 95.5%
+2026-09-21 15:19:45,002 transreid INFO: best so far: clipreid_baseline mAP 71.2% R1 87.2% @epoch 6 | holistic mAP 71.8% R1 87.6% @epoch 6 | part_lse mAP 66.8% R1 82.2% @epoch 8
+2026-09-21 15:19:50,717 transreid INFO: Epoch[9] Iteration[50/185] Loss: 8.863 (id 3.303 tri 0.427 i2t 1.683 | part_id 1.626 part_tri 0.110 part_i2t 2.803 pix 0.893) Acc: 0.917, Base Lr: 3.15e-04
+2026-09-21 15:19:55,922 transreid INFO: Epoch[9] Iteration[100/185] Loss: 8.614 (id 3.201 tri 0.421 i2t 1.618 | part_id 1.596 part_tri 0.110 part_i2t 2.713 pix 0.894) Acc: 0.929, Base Lr: 3.15e-04
+2026-09-21 15:20:01,159 transreid INFO: Epoch[9] Iteration[150/185] Loss: 8.394 (id 3.112 tri 0.404 i2t 1.582 | part_id 1.564 part_tri 0.108 part_i2t 2.620 pix 0.897) Acc: 0.937, Base Lr: 3.15e-04
+2026-09-21 15:20:04,129 transreid INFO: Epoch 9 done. Loss: 8.187 Time per batch: 0.105[s] Speed: 612.4[samples/s]
+2026-09-21 15:20:09,733 transreid INFO: Epoch[10] Iteration[50/185] Loss: 8.677 (id 3.187 tri 0.418 i2t 1.660 | part_id 1.617 part_tri 0.111 part_i2t 2.740 pix 0.893) Acc: 0.936, Base Lr: 3.50e-04
+2026-09-21 15:20:14,904 transreid INFO: Epoch[10] Iteration[100/185] Loss: 8.495 (id 3.121 tri 0.393 i2t 1.629 | part_id 1.604 part_tri 0.108 part_i2t 2.657 pix 0.894) Acc: 0.941, Base Lr: 3.50e-04
+2026-09-21 15:20:20,112 transreid INFO: Epoch[10] Iteration[150/185] Loss: 8.258 (id 3.036 tri 0.374 i2t 1.585 | part_id 1.566 part_tri 0.104 part_i2t 2.559 pix 0.898) Acc: 0.949, Base Lr: 3.50e-04
+2026-09-21 15:20:23,051 transreid INFO: Epoch 10 done. Loss: 8.051 Time per batch: 0.103[s] Speed: 619.0[samples/s]
+2026-09-21 15:20:33,393 transreid INFO: Validation Results - Epoch: 10
+2026-09-21 15:20:33,393 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.8379999995231628, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.04600000008940697, 'legs': 0.0010000000474974513, 'feet': 0.13199999928474426} | gallery: {'global': 0.0, 'head': 0.8600000143051147, 'upper_arms_torso': 0.039000000804662704, 'lower_arms_torso': 0.13300000131130219, 'legs': 0.02800000086426735, 'feet': 0.1889999955892563}
+2026-09-21 15:20:33,456 transreid INFO: query-gallery pairs with >=1 unmatched part: 98.4% | with no shared part: 1.25% | mean unmatched parts: 1.51
+2026-09-21 15:20:36,322 transreid INFO: [clipreid_baseline] mAP: 67.0%  Rank-1: 85.2%  Rank-5: 94.5%  Rank-10: 97.0%
+2026-09-21 15:20:39,057 transreid INFO: [holistic         ] mAP: 68.0%  Rank-1: 85.8%  Rank-5: 94.5%  Rank-10: 96.6%
+2026-09-21 15:20:41,785 transreid INFO: [part_lse         ] mAP: 63.9%  Rank-1: 81.4%  Rank-5: 92.7%  Rank-10: 95.4%
+2026-09-21 15:20:41,894 transreid INFO: best so far: clipreid_baseline mAP 71.2% R1 87.2% @epoch 6 | holistic mAP 71.8% R1 87.6% @epoch 6 | part_lse mAP 66.8% R1 82.2% @epoch 8
+2026-09-21 15:20:47,634 transreid INFO: Epoch[11] Iteration[50/185] Loss: 8.176 (id 2.990 tri 0.356 i2t 1.578 | part_id 1.533 part_tri 0.106 part_i2t 2.604 pix 0.889) Acc: 0.948, Base Lr: 3.50e-04
+2026-09-21 15:20:52,827 transreid INFO: Epoch[11] Iteration[100/185] Loss: 7.906 (id 2.904 tri 0.334 i2t 1.519 | part_id 1.501 part_tri 0.096 part_i2t 2.479 pix 0.890) Acc: 0.957, Base Lr: 3.50e-04
+2026-09-21 15:20:57,884 transreid INFO: Epoch[11] Iteration[150/185] Loss: 7.738 (id 2.853 tri 0.325 i2t 1.490 | part_id 1.474 part_tri 0.093 part_i2t 2.380 pix 0.893) Acc: 0.961, Base Lr: 3.50e-04
+2026-09-21 15:21:00,943 transreid INFO: Epoch 11 done. Loss: 7.571 Time per batch: 0.104[s] Speed: 618.2[samples/s]
+2026-09-21 15:21:06,681 transreid INFO: Epoch[12] Iteration[50/185] Loss: 7.776 (id 2.853 tri 0.312 i2t 1.515 | part_id 1.461 part_tri 0.091 part_i2t 2.464 pix 0.890) Acc: 0.963, Base Lr: 3.50e-04
+2026-09-21 15:21:11,775 transreid INFO: Epoch[12] Iteration[100/185] Loss: 7.519 (id 2.784 tri 0.282 i2t 1.463 | part_id 1.429 part_tri 0.082 part_i2t 2.333 pix 0.888) Acc: 0.970, Base Lr: 3.50e-04
+2026-09-21 15:21:16,841 transreid INFO: Epoch[12] Iteration[150/185] Loss: 7.349 (id 2.738 tri 0.270 i2t 1.430 | part_id 1.402 part_tri 0.079 part_i2t 2.237 pix 0.891) Acc: 0.974, Base Lr: 3.50e-04
+2026-09-21 15:21:19,816 transreid INFO: Epoch 12 done. Loss: 7.192 Time per batch: 0.103[s] Speed: 624.0[samples/s]
+2026-09-21 15:21:30,157 transreid INFO: Validation Results - Epoch: 12
+2026-09-21 15:21:30,158 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.6520000100135803, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0560000017285347, 'legs': 0.0010000000474974513, 'feet': 0.19699999690055847} | gallery: {'global': 0.0, 'head': 0.671999990940094, 'upper_arms_torso': 0.02500000037252903, 'lower_arms_torso': 0.12399999797344208, 'legs': 0.017999999225139618, 'feet': 0.2930000126361847}
+2026-09-21 15:21:30,223 transreid INFO: query-gallery pairs with >=1 unmatched part: 93.4% | with no shared part: 0.54% | mean unmatched parts: 1.53
+2026-09-21 15:21:33,016 transreid INFO: [clipreid_baseline] mAP: 75.4%  Rank-1: 89.2%  Rank-5: 96.2%  Rank-10: 97.5%
+2026-09-21 15:21:35,738 transreid INFO: [holistic         ] mAP: 75.7%  Rank-1: 89.9%  Rank-5: 96.0%  Rank-10: 97.4%
+2026-09-21 15:21:38,472 transreid INFO: [part_lse         ] mAP: 72.2%  Rank-1: 87.3%  Rank-5: 95.1%  Rank-10: 96.8%
+2026-09-21 15:21:38,583 transreid INFO: best so far: clipreid_baseline mAP 75.4% R1 89.2% @epoch 12 | holistic mAP 75.7% R1 89.9% @epoch 12 | part_lse mAP 72.2% R1 87.3% @epoch 12
+2026-09-21 15:21:44,382 transreid INFO: Epoch[13] Iteration[50/185] Loss: 7.464 (id 2.778 tri 0.248 i2t 1.453 | part_id 1.424 part_tri 0.079 part_i2t 2.344 pix 0.886) Acc: 0.963, Base Lr: 3.50e-04
+2026-09-21 15:21:49,516 transreid INFO: Epoch[13] Iteration[100/185] Loss: 7.318 (id 2.735 tri 0.247 i2t 1.422 | part_id 1.401 part_tri 0.075 part_i2t 2.257 pix 0.885) Acc: 0.970, Base Lr: 3.50e-04
+2026-09-21 15:21:54,557 transreid INFO: Epoch[13] Iteration[150/185] Loss: 7.181 (id 2.696 tri 0.243 i2t 1.398 | part_id 1.379 part_tri 0.073 part_i2t 2.163 pix 0.889) Acc: 0.974, Base Lr: 3.50e-04
+2026-09-21 15:21:57,502 transreid INFO: Epoch 13 done. Loss: 7.053 Time per batch: 0.103[s] Speed: 619.1[samples/s]
+2026-09-21 15:22:03,219 transreid INFO: Epoch[14] Iteration[50/185] Loss: 7.170 (id 2.679 tri 0.236 i2t 1.407 | part_id 1.359 part_tri 0.071 part_i2t 2.217 pix 0.881) Acc: 0.974, Base Lr: 3.50e-04
+2026-09-21 15:22:08,254 transreid INFO: Epoch[14] Iteration[100/185] Loss: 6.971 (id 2.632 tri 0.203 i2t 1.375 | part_id 1.333 part_tri 0.062 part_i2t 2.114 pix 0.882) Acc: 0.980, Base Lr: 3.50e-04
+2026-09-21 15:22:13,275 transreid INFO: Epoch[14] Iteration[150/185] Loss: 6.902 (id 2.616 tri 0.203 i2t 1.365 | part_id 1.327 part_tri 0.062 part_i2t 2.043 pix 0.883) Acc: 0.980, Base Lr: 3.50e-04
+2026-09-21 15:22:16,269 transreid INFO: Epoch 14 done. Loss: 6.796 Time per batch: 0.103[s] Speed: 624.1[samples/s]
+2026-09-21 15:22:26,789 transreid INFO: Validation Results - Epoch: 14
+2026-09-21 15:22:26,790 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.7429999709129333, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.03099999949336052, 'legs': 0.003000000026077032, 'feet': 0.39800000190734863} | gallery: {'global': 0.0, 'head': 0.7509999871253967, 'upper_arms_torso': 0.02800000086426735, 'lower_arms_torso': 0.09399999678134918, 'legs': 0.024000000208616257, 'feet': 0.4620000123977661}
+2026-09-21 15:22:26,864 transreid INFO: query-gallery pairs with >=1 unmatched part: 97.6% | with no shared part: 1.11% | mean unmatched parts: 1.79
+2026-09-21 15:22:29,703 transreid INFO: [clipreid_baseline] mAP: 78.9%  Rank-1: 91.2%  Rank-5: 97.0%  Rank-10: 98.5%
+2026-09-21 15:22:32,452 transreid INFO: [holistic         ] mAP: 79.1%  Rank-1: 91.5%  Rank-5: 96.5%  Rank-10: 98.2%
+2026-09-21 15:22:35,166 transreid INFO: [part_lse         ] mAP: 75.1%  Rank-1: 88.9%  Rank-5: 95.5%  Rank-10: 97.2%
+2026-09-21 15:22:35,275 transreid INFO: best so far: clipreid_baseline mAP 78.9% R1 91.2% @epoch 14 | holistic mAP 79.1% R1 91.5% @epoch 14 | part_lse mAP 75.1% R1 88.9% @epoch 14
+2026-09-21 15:22:40,882 transreid INFO: Epoch[15] Iteration[50/185] Loss: 6.936 (id 2.620 tri 0.183 i2t 1.380 | part_id 1.324 part_tri 0.060 part_i2t 2.127 pix 0.875) Acc: 0.984, Base Lr: 3.50e-04
+2026-09-21 15:22:45,898 transreid INFO: Epoch[15] Iteration[100/185] Loss: 6.793 (id 2.587 tri 0.174 i2t 1.349 | part_id 1.304 part_tri 0.055 part_i2t 2.034 pix 0.876) Acc: 0.983, Base Lr: 3.50e-04
+2026-09-21 15:22:50,899 transreid INFO: Epoch[15] Iteration[150/185] Loss: 6.732 (id 2.569 tri 0.181 i2t 1.337 | part_id 1.294 part_tri 0.056 part_i2t 1.973 pix 0.880) Acc: 0.984, Base Lr: 3.50e-04
+2026-09-21 15:22:53,890 transreid INFO: Epoch 15 done. Loss: 6.668 Time per batch: 0.101[s] Speed: 632.6[samples/s]
+2026-09-21 15:22:59,565 transreid INFO: Epoch[16] Iteration[50/185] Loss: 6.839 (id 2.585 tri 0.174 i2t 1.363 | part_id 1.310 part_tri 0.057 part_i2t 2.090 pix 0.874) Acc: 0.987, Base Lr: 3.50e-04
+2026-09-21 15:23:04,583 transreid INFO: Epoch[16] Iteration[100/185] Loss: 6.722 (id 2.556 tri 0.174 i2t 1.334 | part_id 1.293 part_tri 0.055 part_i2t 2.008 pix 0.873) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:23:09,675 transreid INFO: Epoch[16] Iteration[150/185] Loss: 6.640 (id 2.539 tri 0.173 i2t 1.320 | part_id 1.280 part_tri 0.053 part_i2t 1.935 pix 0.878) Acc: 0.987, Base Lr: 3.50e-04
+2026-09-21 15:23:12,460 transreid INFO: Epoch 16 done. Loss: 6.547 Time per batch: 0.101[s] Speed: 630.7[samples/s]
+2026-09-21 15:23:22,929 transreid INFO: Validation Results - Epoch: 16
+2026-09-21 15:23:22,929 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.515999972820282, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.014999999664723873, 'legs': 0.0010000000474974513, 'feet': 0.2280000001192093} | gallery: {'global': 0.0, 'head': 0.5950000286102295, 'upper_arms_torso': 0.03500000014901161, 'lower_arms_torso': 0.07900000363588333, 'legs': 0.019999999552965164, 'feet': 0.32600000500679016}
+2026-09-21 15:23:22,991 transreid INFO: query-gallery pairs with >=1 unmatched part: 89.0% | with no shared part: 0.88% | mean unmatched parts: 1.43
+2026-09-21 15:23:25,892 transreid INFO: [clipreid_baseline] mAP: 75.1%  Rank-1: 89.6%  Rank-5: 96.4%  Rank-10: 97.6%
+2026-09-21 15:23:28,665 transreid INFO: [holistic         ] mAP: 76.5%  Rank-1: 90.1%  Rank-5: 96.4%  Rank-10: 97.6%
+2026-09-21 15:23:31,422 transreid INFO: [part_lse         ] mAP: 72.8%  Rank-1: 86.9%  Rank-5: 95.1%  Rank-10: 97.1%
+2026-09-21 15:23:31,529 transreid INFO: best so far: clipreid_baseline mAP 78.9% R1 91.2% @epoch 14 | holistic mAP 79.1% R1 91.5% @epoch 14 | part_lse mAP 75.1% R1 88.9% @epoch 14
+2026-09-21 15:23:37,157 transreid INFO: Epoch[17] Iteration[50/185] Loss: 6.675 (id 2.554 tri 0.153 i2t 1.344 | part_id 1.272 part_tri 0.048 part_i2t 1.999 pix 0.871) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:23:42,102 transreid INFO: Epoch[17] Iteration[100/185] Loss: 6.601 (id 2.534 tri 0.157 i2t 1.322 | part_id 1.265 part_tri 0.050 part_i2t 1.936 pix 0.875) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:23:47,179 transreid INFO: Epoch[17] Iteration[150/185] Loss: 6.500 (id 2.505 tri 0.157 i2t 1.302 | part_id 1.250 part_tri 0.048 part_i2t 1.863 pix 0.876) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:23:50,233 transreid INFO: Epoch 17 done. Loss: 6.407 Time per batch: 0.102[s] Speed: 629.6[samples/s]
+2026-09-21 15:23:55,859 transreid INFO: Epoch[18] Iteration[50/185] Loss: 6.689 (id 2.553 tri 0.171 i2t 1.344 | part_id 1.277 part_tri 0.051 part_i2t 1.979 pix 0.869) Acc: 0.985, Base Lr: 3.50e-04
+2026-09-21 15:24:00,941 transreid INFO: Epoch[18] Iteration[100/185] Loss: 6.620 (id 2.540 tri 0.168 i2t 1.326 | part_id 1.269 part_tri 0.050 part_i2t 1.923 pix 0.873) Acc: 0.987, Base Lr: 3.50e-04
+2026-09-21 15:24:05,968 transreid INFO: Epoch[18] Iteration[150/185] Loss: 6.514 (id 2.510 tri 0.158 i2t 1.308 | part_id 1.256 part_tri 0.047 part_i2t 1.855 pix 0.876) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:24:08,875 transreid INFO: Epoch 18 done. Loss: 6.426 Time per batch: 0.102[s] Speed: 628.3[samples/s]
+2026-09-21 15:24:19,286 transreid INFO: Validation Results - Epoch: 18
+2026-09-21 15:24:19,287 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.8410000205039978, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.02199999988079071, 'legs': 0.0020000000949949026, 'feet': 0.3370000123977661} | gallery: {'global': 0.0, 'head': 0.8640000224113464, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.1080000028014183, 'legs': 0.032999999821186066, 'feet': 0.40299999713897705}
+2026-09-21 15:24:19,366 transreid INFO: query-gallery pairs with >=1 unmatched part: 98.9% | with no shared part: 1.60% | mean unmatched parts: 1.79
+2026-09-21 15:24:22,217 transreid INFO: [clipreid_baseline] mAP: 77.9%  Rank-1: 91.0%  Rank-5: 97.0%  Rank-10: 98.3%
+2026-09-21 15:24:24,965 transreid INFO: [holistic         ] mAP: 78.5%  Rank-1: 91.2%  Rank-5: 96.9%  Rank-10: 98.1%
+2026-09-21 15:24:27,675 transreid INFO: [part_lse         ] mAP: 74.8%  Rank-1: 88.0%  Rank-5: 95.5%  Rank-10: 97.2%
+2026-09-21 15:24:27,789 transreid INFO: best so far: clipreid_baseline mAP 78.9% R1 91.2% @epoch 14 | holistic mAP 79.1% R1 91.5% @epoch 14 | part_lse mAP 75.1% R1 88.9% @epoch 14
+2026-09-21 15:24:33,415 transreid INFO: Epoch[19] Iteration[50/185] Loss: 6.623 (id 2.529 tri 0.164 i2t 1.339 | part_id 1.259 part_tri 0.051 part_i2t 1.951 pix 0.874) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:24:38,432 transreid INFO: Epoch[19] Iteration[100/185] Loss: 6.546 (id 2.516 tri 0.152 i2t 1.321 | part_id 1.253 part_tri 0.048 part_i2t 1.901 pix 0.875) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:24:43,419 transreid INFO: Epoch[19] Iteration[150/185] Loss: 6.456 (id 2.493 tri 0.146 i2t 1.305 | part_id 1.242 part_tri 0.045 part_i2t 1.834 pix 0.879) Acc: 0.990, Base Lr: 3.50e-04
+2026-09-21 15:24:46,363 transreid INFO: Epoch 19 done. Loss: 6.395 Time per batch: 0.101[s] Speed: 630.6[samples/s]
+2026-09-21 15:24:51,931 transreid INFO: Epoch[20] Iteration[50/185] Loss: 6.670 (id 2.553 tri 0.169 i2t 1.355 | part_id 1.268 part_tri 0.053 part_i2t 1.933 pix 0.873) Acc: 0.983, Base Lr: 3.50e-04
+2026-09-21 15:24:56,926 transreid INFO: Epoch[20] Iteration[100/185] Loss: 6.514 (id 2.513 tri 0.148 i2t 1.320 | part_id 1.253 part_tri 0.045 part_i2t 1.858 pix 0.876) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:25:01,974 transreid INFO: Epoch[20] Iteration[150/185] Loss: 6.427 (id 2.489 tri 0.143 i2t 1.302 | part_id 1.241 part_tri 0.044 part_i2t 1.801 pix 0.876) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:25:05,018 transreid INFO: Epoch 20 done. Loss: 6.346 Time per batch: 0.101[s] Speed: 631.3[samples/s]
+2026-09-21 15:25:05,302 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage2/RN50_part_stage2_20.pth
+2026-09-21 15:25:15,691 transreid INFO: Validation Results - Epoch: 20
+2026-09-21 15:25:15,692 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.8870000243186951, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.03400000184774399, 'legs': 0.0010000000474974513, 'feet': 0.2809999883174896} | gallery: {'global': 0.0, 'head': 0.906000018119812, 'upper_arms_torso': 0.03700000047683716, 'lower_arms_torso': 0.09799999743700027, 'legs': 0.024000000208616257, 'feet': 0.34700000286102295}
+2026-09-21 15:25:15,757 transreid INFO: query-gallery pairs with >=1 unmatched part: 99.5% | with no shared part: 1.21% | mean unmatched parts: 1.71
+2026-09-21 15:25:18,614 transreid INFO: [clipreid_baseline] mAP: 78.3%  Rank-1: 90.8%  Rank-5: 96.9%  Rank-10: 98.1%
+2026-09-21 15:25:21,438 transreid INFO: [holistic         ] mAP: 79.4%  Rank-1: 91.2%  Rank-5: 96.6%  Rank-10: 98.1%
+2026-09-21 15:25:24,232 transreid INFO: [part_lse         ] mAP: 74.1%  Rank-1: 86.3%  Rank-5: 94.7%  Rank-10: 96.6%
+2026-09-21 15:25:24,347 transreid INFO: best so far: clipreid_baseline mAP 78.9% R1 91.2% @epoch 14 | holistic mAP 79.4% R1 91.2% @epoch 20 | part_lse mAP 75.1% R1 88.9% @epoch 14
+2026-09-21 15:25:29,875 transreid INFO: Epoch[21] Iteration[50/185] Loss: 6.607 (id 2.533 tri 0.156 i2t 1.340 | part_id 1.262 part_tri 0.052 part_i2t 1.915 pix 0.877) Acc: 0.986, Base Lr: 3.50e-04
+2026-09-21 15:25:34,903 transreid INFO: Epoch[21] Iteration[100/185] Loss: 6.463 (id 2.497 tri 0.142 i2t 1.309 | part_id 1.245 part_tri 0.045 part_i2t 1.837 pix 0.877) Acc: 0.990, Base Lr: 3.50e-04
+2026-09-21 15:25:39,984 transreid INFO: Epoch[21] Iteration[150/185] Loss: 6.427 (id 2.490 tri 0.146 i2t 1.302 | part_id 1.240 part_tri 0.044 part_i2t 1.794 pix 0.877) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:25:42,813 transreid INFO: Epoch 21 done. Loss: 6.359 Time per batch: 0.101[s] Speed: 634.3[samples/s]
+2026-09-21 15:25:48,416 transreid INFO: Epoch[22] Iteration[50/185] Loss: 6.571 (id 2.535 tri 0.146 i2t 1.342 | part_id 1.255 part_tri 0.049 part_i2t 1.881 pix 0.872) Acc: 0.986, Base Lr: 3.50e-04
+2026-09-21 15:25:53,348 transreid INFO: Epoch[22] Iteration[100/185] Loss: 6.502 (id 2.512 tri 0.149 i2t 1.320 | part_id 1.246 part_tri 0.048 part_i2t 1.841 pix 0.873) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:25:58,276 transreid INFO: Epoch[22] Iteration[150/185] Loss: 6.402 (id 2.483 tri 0.143 i2t 1.301 | part_id 1.233 part_tri 0.044 part_i2t 1.782 pix 0.875) Acc: 0.990, Base Lr: 3.50e-04
+2026-09-21 15:26:01,118 transreid INFO: Epoch 22 done. Loss: 6.324 Time per batch: 0.100[s] Speed: 639.9[samples/s]
+2026-09-21 15:26:11,575 transreid INFO: Validation Results - Epoch: 22
+2026-09-21 15:26:11,576 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.8989999890327454, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.019999999552965164, 'legs': 0.0020000000949949026, 'feet': 0.3880000114440918} | gallery: {'global': 0.0, 'head': 0.9110000133514404, 'upper_arms_torso': 0.03999999910593033, 'lower_arms_torso': 0.08399999886751175, 'legs': 0.01899999938905239, 'feet': 0.4740000069141388}
+2026-09-21 15:26:11,639 transreid INFO: query-gallery pairs with >=1 unmatched part: 99.7% | with no shared part: 0.93% | mean unmatched parts: 1.83
+2026-09-21 15:26:14,455 transreid INFO: [clipreid_baseline] mAP: 79.3%  Rank-1: 91.4%  Rank-5: 97.5%  Rank-10: 98.4%
+2026-09-21 15:26:17,179 transreid INFO: [holistic         ] mAP: 79.9%  Rank-1: 91.8%  Rank-5: 97.2%  Rank-10: 98.4%
+2026-09-21 15:26:19,896 transreid INFO: [part_lse         ] mAP: 75.2%  Rank-1: 88.1%  Rank-5: 95.4%  Rank-10: 97.3%
+2026-09-21 15:26:20,010 transreid INFO: best so far: clipreid_baseline mAP 79.3% R1 91.4% @epoch 22 | holistic mAP 79.9% R1 91.8% @epoch 22 | part_lse mAP 75.2% R1 88.1% @epoch 22
+2026-09-21 15:26:25,462 transreid INFO: Epoch[23] Iteration[50/185] Loss: 6.456 (id 2.486 tri 0.163 i2t 1.304 | part_id 1.231 part_tri 0.049 part_i2t 1.838 pix 0.872) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:26:30,531 transreid INFO: Epoch[23] Iteration[100/185] Loss: 6.370 (id 2.469 tri 0.144 i2t 1.289 | part_id 1.224 part_tri 0.044 part_i2t 1.790 pix 0.872) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:26:35,417 transreid INFO: Epoch[23] Iteration[150/185] Loss: 6.324 (id 2.457 tri 0.143 i2t 1.281 | part_id 1.218 part_tri 0.044 part_i2t 1.749 pix 0.875) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:26:38,344 transreid INFO: Epoch 23 done. Loss: 6.273 Time per batch: 0.100[s] Speed: 642.3[samples/s]
+2026-09-21 15:26:43,900 transreid INFO: Epoch[24] Iteration[50/185] Loss: 6.575 (id 2.534 tri 0.145 i2t 1.358 | part_id 1.254 part_tri 0.048 part_i2t 1.862 pix 0.873) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:26:48,969 transreid INFO: Epoch[24] Iteration[100/185] Loss: 6.486 (id 2.507 tri 0.144 i2t 1.326 | part_id 1.244 part_tri 0.046 part_i2t 1.825 pix 0.874) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:26:53,927 transreid INFO: Epoch[24] Iteration[150/185] Loss: 6.371 (id 2.473 tri 0.136 i2t 1.302 | part_id 1.227 part_tri 0.043 part_i2t 1.766 pix 0.876) Acc: 0.991, Base Lr: 3.50e-04
+2026-09-21 15:26:56,804 transreid INFO: Epoch 24 done. Loss: 6.301 Time per batch: 0.101[s] Speed: 634.5[samples/s]
+2026-09-21 15:27:07,182 transreid INFO: Validation Results - Epoch: 24
+2026-09-21 15:27:07,183 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.753000020980835, 'upper_arms_torso': 0.0010000000474974513, 'lower_arms_torso': 0.04600000008940697, 'legs': 0.0020000000949949026, 'feet': 0.367000013589859} | gallery: {'global': 0.0, 'head': 0.7929999828338623, 'upper_arms_torso': 0.050999999046325684, 'lower_arms_torso': 0.12700000405311584, 'legs': 0.028999999165534973, 'feet': 0.42800000309944153}
+2026-09-21 15:27:07,245 transreid INFO: query-gallery pairs with >=1 unmatched part: 98.1% | with no shared part: 1.55% | mean unmatched parts: 1.84
+2026-09-21 15:27:10,167 transreid INFO: [clipreid_baseline] mAP: 76.0%  Rank-1: 90.0%  Rank-5: 96.7%  Rank-10: 97.9%
+2026-09-21 15:27:12,903 transreid INFO: [holistic         ] mAP: 77.7%  Rank-1: 90.4%  Rank-5: 96.6%  Rank-10: 98.0%
+2026-09-21 15:27:15,588 transreid INFO: [part_lse         ] mAP: 73.1%  Rank-1: 86.3%  Rank-5: 94.8%  Rank-10: 96.7%
+2026-09-21 15:27:15,700 transreid INFO: best so far: clipreid_baseline mAP 79.3% R1 91.4% @epoch 22 | holistic mAP 79.9% R1 91.8% @epoch 22 | part_lse mAP 75.2% R1 88.1% @epoch 22
+2026-09-21 15:27:21,257 transreid INFO: Epoch[25] Iteration[50/185] Loss: 6.483 (id 2.507 tri 0.142 i2t 1.321 | part_id 1.246 part_tri 0.046 part_i2t 1.831 pix 0.874) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:27:26,175 transreid INFO: Epoch[25] Iteration[100/185] Loss: 6.382 (id 2.479 tri 0.141 i2t 1.297 | part_id 1.233 part_tri 0.043 part_i2t 1.766 pix 0.873) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:27:31,060 transreid INFO: Epoch[25] Iteration[150/185] Loss: 6.298 (id 2.458 tri 0.135 i2t 1.284 | part_id 1.220 part_tri 0.042 part_i2t 1.706 pix 0.875) Acc: 0.990, Base Lr: 3.50e-04
+2026-09-21 15:27:33,931 transreid INFO: Epoch 25 done. Loss: 6.223 Time per batch: 0.099[s] Speed: 646.0[samples/s]
+2026-09-21 15:27:39,478 transreid INFO: Epoch[26] Iteration[50/185] Loss: 6.435 (id 2.488 tri 0.139 i2t 1.313 | part_id 1.239 part_tri 0.045 part_i2t 1.815 pix 0.864) Acc: 0.988, Base Lr: 3.50e-04
+2026-09-21 15:27:44,363 transreid INFO: Epoch[26] Iteration[100/185] Loss: 6.394 (id 2.480 tri 0.133 i2t 1.297 | part_id 1.237 part_tri 0.044 part_i2t 1.793 pix 0.873) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:27:49,158 transreid INFO: Epoch[26] Iteration[150/185] Loss: 6.312 (id 2.458 tri 0.130 i2t 1.281 | part_id 1.225 part_tri 0.042 part_i2t 1.740 pix 0.874) Acc: 0.991, Base Lr: 3.50e-04
+2026-09-21 15:27:52,003 transreid INFO: Epoch 26 done. Loss: 6.242 Time per batch: 0.099[s] Speed: 648.1[samples/s]
+2026-09-21 15:28:02,420 transreid INFO: Validation Results - Epoch: 26
+2026-09-21 15:28:02,424 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.8389999866485596, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.05000000074505806, 'legs': 0.009999999776482582, 'feet': 0.4339999854564667} | gallery: {'global': 0.0, 'head': 0.8550000190734863, 'upper_arms_torso': 0.03500000014901161, 'lower_arms_torso': 0.13300000131130219, 'legs': 0.041999999433755875, 'feet': 0.49000000953674316}
+2026-09-21 15:28:02,486 transreid INFO: query-gallery pairs with >=1 unmatched part: 99.3% | with no shared part: 1.65% | mean unmatched parts: 1.95
+2026-09-21 15:28:05,324 transreid INFO: [clipreid_baseline] mAP: 78.8%  Rank-1: 90.4%  Rank-5: 96.5%  Rank-10: 98.0%
+2026-09-21 15:28:08,086 transreid INFO: [holistic         ] mAP: 79.1%  Rank-1: 91.2%  Rank-5: 96.5%  Rank-10: 97.9%
+2026-09-21 15:28:10,819 transreid INFO: [part_lse         ] mAP: 74.4%  Rank-1: 88.4%  Rank-5: 95.4%  Rank-10: 97.3%
+2026-09-21 15:28:10,926 transreid INFO: best so far: clipreid_baseline mAP 79.3% R1 91.4% @epoch 22 | holistic mAP 79.9% R1 91.8% @epoch 22 | part_lse mAP 75.2% R1 88.1% @epoch 22
+2026-09-21 15:28:16,321 transreid INFO: Epoch[27] Iteration[50/185] Loss: 6.422 (id 2.484 tri 0.137 i2t 1.317 | part_id 1.238 part_tri 0.044 part_i2t 1.797 pix 0.869) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:28:21,234 transreid INFO: Epoch[27] Iteration[100/185] Loss: 6.282 (id 2.446 tri 0.124 i2t 1.286 | part_id 1.218 part_tri 0.040 part_i2t 1.728 pix 0.869) Acc: 0.995, Base Lr: 3.50e-04
+2026-09-21 15:28:26,168 transreid INFO: Epoch[27] Iteration[150/185] Loss: 6.246 (id 2.439 tri 0.123 i2t 1.278 | part_id 1.214 part_tri 0.039 part_i2t 1.694 pix 0.872) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:28:29,018 transreid INFO: Epoch 27 done. Loss: 6.202 Time per batch: 0.099[s] Speed: 647.4[samples/s]
+2026-09-21 15:28:34,568 transreid INFO: Epoch[28] Iteration[50/185] Loss: 6.359 (id 2.466 tri 0.117 i2t 1.293 | part_id 1.234 part_tri 0.041 part_i2t 1.809 pix 0.870) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:28:39,507 transreid INFO: Epoch[28] Iteration[100/185] Loss: 6.313 (id 2.458 tri 0.127 i2t 1.282 | part_id 1.226 part_tri 0.042 part_i2t 1.744 pix 0.872) Acc: 0.991, Base Lr: 3.50e-04
+2026-09-21 15:28:44,437 transreid INFO: Epoch[28] Iteration[150/185] Loss: 6.242 (id 2.438 tri 0.122 i2t 1.272 | part_id 1.215 part_tri 0.040 part_i2t 1.699 pix 0.875) Acc: 0.991, Base Lr: 3.50e-04
+2026-09-21 15:28:47,201 transreid INFO: Epoch 28 done. Loss: 6.184 Time per batch: 0.100[s] Speed: 640.6[samples/s]
+2026-09-21 15:28:57,713 transreid INFO: Validation Results - Epoch: 28
+2026-09-21 15:28:57,714 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.7609999775886536, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.0010000000474974513, 'feet': 0.3490000069141388} | gallery: {'global': 0.0, 'head': 0.8190000057220459, 'upper_arms_torso': 0.027000000700354576, 'lower_arms_torso': 0.054999999701976776, 'legs': 0.023000000044703484, 'feet': 0.4230000078678131}
+2026-09-21 15:28:57,776 transreid INFO: query-gallery pairs with >=1 unmatched part: 98.1% | with no shared part: 0.91% | mean unmatched parts: 1.69
+2026-09-21 15:29:00,632 transreid INFO: [clipreid_baseline] mAP: 77.2%  Rank-1: 90.7%  Rank-5: 96.6%  Rank-10: 97.9%
+2026-09-21 15:29:03,423 transreid INFO: [holistic         ] mAP: 79.0%  Rank-1: 90.9%  Rank-5: 96.9%  Rank-10: 98.0%
+2026-09-21 15:29:06,178 transreid INFO: [part_lse         ] mAP: 74.9%  Rank-1: 87.6%  Rank-5: 95.7%  Rank-10: 97.2%
+2026-09-21 15:29:06,292 transreid INFO: best so far: clipreid_baseline mAP 79.3% R1 91.4% @epoch 22 | holistic mAP 79.9% R1 91.8% @epoch 22 | part_lse mAP 75.2% R1 88.1% @epoch 22
+2026-09-21 15:29:11,824 transreid INFO: Epoch[29] Iteration[50/185] Loss: 6.403 (id 2.475 tri 0.131 i2t 1.320 | part_id 1.235 part_tri 0.042 part_i2t 1.790 pix 0.872) Acc: 0.989, Base Lr: 3.50e-04
+2026-09-21 15:29:16,680 transreid INFO: Epoch[29] Iteration[100/185] Loss: 6.310 (id 2.460 tri 0.119 i2t 1.299 | part_id 1.229 part_tri 0.038 part_i2t 1.720 pix 0.872) Acc: 0.990, Base Lr: 3.50e-04
+2026-09-21 15:29:21,545 transreid INFO: Epoch[29] Iteration[150/185] Loss: 6.231 (id 2.436 tri 0.121 i2t 1.280 | part_id 1.215 part_tri 0.038 part_i2t 1.673 pix 0.872) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:29:24,287 transreid INFO: Epoch 29 done. Loss: 6.177 Time per batch: 0.099[s] Speed: 647.3[samples/s]
+2026-09-21 15:29:29,737 transreid INFO: Epoch[30] Iteration[50/185] Loss: 6.308 (id 2.454 tri 0.114 i2t 1.304 | part_id 1.224 part_tri 0.035 part_i2t 1.744 pix 0.870) Acc: 0.991, Base Lr: 3.50e-04
+2026-09-21 15:29:34,553 transreid INFO: Epoch[30] Iteration[100/185] Loss: 6.276 (id 2.447 tri 0.122 i2t 1.286 | part_id 1.221 part_tri 0.038 part_i2t 1.712 pix 0.874) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:29:39,396 transreid INFO: Epoch[30] Iteration[150/185] Loss: 6.251 (id 2.443 tri 0.126 i2t 1.278 | part_id 1.219 part_tri 0.038 part_i2t 1.681 pix 0.874) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:29:42,189 transreid INFO: Epoch 30 done. Loss: 6.206 Time per batch: 0.097[s] Speed: 657.8[samples/s]
+2026-09-21 15:29:52,594 transreid INFO: Validation Results - Epoch: 30
+2026-09-21 15:29:52,595 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.8330000042915344, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.014000000432133675, 'legs': 0.0010000000474974513, 'feet': 0.4950000047683716} | gallery: {'global': 0.0, 'head': 0.847000002861023, 'upper_arms_torso': 0.041999999433755875, 'lower_arms_torso': 0.08299999684095383, 'legs': 0.03099999949336052, 'feet': 0.5509999990463257}
+2026-09-21 15:29:52,659 transreid INFO: query-gallery pairs with >=1 unmatched part: 99.3% | with no shared part: 1.51% | mean unmatched parts: 1.92
+2026-09-21 15:29:55,462 transreid INFO: [clipreid_baseline] mAP: 74.7%  Rank-1: 89.2%  Rank-5: 96.1%  Rank-10: 97.5%
+2026-09-21 15:29:58,216 transreid INFO: [holistic         ] mAP: 75.5%  Rank-1: 89.5%  Rank-5: 96.2%  Rank-10: 97.5%
+2026-09-21 15:30:00,971 transreid INFO: [part_lse         ] mAP: 71.2%  Rank-1: 86.1%  Rank-5: 95.1%  Rank-10: 96.6%
+2026-09-21 15:30:01,077 transreid INFO: best so far: clipreid_baseline mAP 79.3% R1 91.4% @epoch 22 | holistic mAP 79.9% R1 91.8% @epoch 22 | part_lse mAP 75.2% R1 88.1% @epoch 22
+2026-09-21 15:30:06,601 transreid INFO: Epoch[31] Iteration[50/185] Loss: 6.478 (id 2.498 tri 0.157 i2t 1.319 | part_id 1.246 part_tri 0.046 part_i2t 1.816 pix 0.871) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:30:11,547 transreid INFO: Epoch[31] Iteration[100/185] Loss: 6.347 (id 2.467 tri 0.138 i2t 1.295 | part_id 1.231 part_tri 0.041 part_i2t 1.737 pix 0.873) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:30:16,520 transreid INFO: Epoch[31] Iteration[150/185] Loss: 6.258 (id 2.444 tri 0.130 i2t 1.279 | part_id 1.221 part_tri 0.039 part_i2t 1.681 pix 0.871) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:30:19,355 transreid INFO: Epoch 31 done. Loss: 6.203 Time per batch: 0.100[s] Speed: 640.8[samples/s]
+2026-09-21 15:30:24,809 transreid INFO: Epoch[32] Iteration[50/185] Loss: 6.333 (id 2.467 tri 0.124 i2t 1.291 | part_id 1.236 part_tri 0.040 part_i2t 1.738 pix 0.870) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:30:29,729 transreid INFO: Epoch[32] Iteration[100/185] Loss: 6.252 (id 2.439 tri 0.120 i2t 1.273 | part_id 1.224 part_tri 0.039 part_i2t 1.701 pix 0.873) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:30:34,610 transreid INFO: Epoch[32] Iteration[150/185] Loss: 6.192 (id 2.422 tri 0.115 i2t 1.262 | part_id 1.213 part_tri 0.037 part_i2t 1.675 pix 0.874) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:30:37,540 transreid INFO: Epoch 32 done. Loss: 6.139 Time per batch: 0.099[s] Speed: 647.6[samples/s]
+2026-09-21 15:30:47,971 transreid INFO: Validation Results - Epoch: 32
+2026-09-21 15:30:47,971 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.6679999828338623, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.013000000268220901, 'legs': 0.004000000189989805, 'feet': 0.23199999332427979} | gallery: {'global': 0.0, 'head': 0.7129999995231628, 'upper_arms_torso': 0.032999999821186066, 'lower_arms_torso': 0.0860000029206276, 'legs': 0.028999999165534973, 'feet': 0.30300000309944153}
+2026-09-21 15:30:48,035 transreid INFO: query-gallery pairs with >=1 unmatched part: 94.3% | with no shared part: 1.24% | mean unmatched parts: 1.53
+2026-09-21 15:30:50,879 transreid INFO: [clipreid_baseline] mAP: 76.3%  Rank-1: 90.8%  Rank-5: 96.7%  Rank-10: 98.0%
+2026-09-21 15:30:53,614 transreid INFO: [holistic         ] mAP: 78.5%  Rank-1: 91.6%  Rank-5: 97.0%  Rank-10: 98.2%
+2026-09-21 15:30:56,336 transreid INFO: [part_lse         ] mAP: 75.0%  Rank-1: 88.3%  Rank-5: 96.1%  Rank-10: 97.1%
+2026-09-21 15:30:56,455 transreid INFO: best so far: clipreid_baseline mAP 79.3% R1 91.4% @epoch 22 | holistic mAP 79.9% R1 91.8% @epoch 22 | part_lse mAP 75.2% R1 88.1% @epoch 22
+2026-09-21 15:31:01,962 transreid INFO: Epoch[33] Iteration[50/185] Loss: 6.260 (id 2.430 tri 0.122 i2t 1.281 | part_id 1.217 part_tri 0.038 part_i2t 1.742 pix 0.863) Acc: 0.995, Base Lr: 3.50e-04
+2026-09-21 15:31:06,874 transreid INFO: Epoch[33] Iteration[100/185] Loss: 6.188 (id 2.412 tri 0.119 i2t 1.264 | part_id 1.211 part_tri 0.037 part_i2t 1.678 pix 0.872) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:31:11,786 transreid INFO: Epoch[33] Iteration[150/185] Loss: 6.146 (id 2.405 tri 0.114 i2t 1.258 | part_id 1.207 part_tri 0.035 part_i2t 1.644 pix 0.872) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:31:14,713 transreid INFO: Epoch 33 done. Loss: 6.079 Time per batch: 0.099[s] Speed: 645.0[samples/s]
+2026-09-21 15:31:20,159 transreid INFO: Epoch[34] Iteration[50/185] Loss: 6.274 (id 2.444 tri 0.114 i2t 1.287 | part_id 1.225 part_tri 0.038 part_i2t 1.728 pix 0.867) Acc: 0.990, Base Lr: 3.50e-04
+2026-09-21 15:31:25,053 transreid INFO: Epoch[34] Iteration[100/185] Loss: 6.198 (id 2.423 tri 0.113 i2t 1.266 | part_id 1.216 part_tri 0.036 part_i2t 1.681 pix 0.867) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:31:29,936 transreid INFO: Epoch[34] Iteration[150/185] Loss: 6.121 (id 2.403 tri 0.107 i2t 1.252 | part_id 1.205 part_tri 0.033 part_i2t 1.635 pix 0.869) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:31:32,838 transreid INFO: Epoch 34 done. Loss: 6.051 Time per batch: 0.099[s] Speed: 646.2[samples/s]
+2026-09-21 15:31:43,393 transreid INFO: Validation Results - Epoch: 34
+2026-09-21 15:31:43,394 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.921999990940094, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.017000000923871994, 'legs': 0.004000000189989805, 'feet': 0.3799999952316284} | gallery: {'global': 0.0, 'head': 0.925000011920929, 'upper_arms_torso': 0.028999999165534973, 'lower_arms_torso': 0.0949999988079071, 'legs': 0.035999998450279236, 'feet': 0.4350000023841858}
+2026-09-21 15:31:43,457 transreid INFO: query-gallery pairs with >=1 unmatched part: 99.7% | with no shared part: 1.28% | mean unmatched parts: 1.82
+2026-09-21 15:31:46,263 transreid INFO: [clipreid_baseline] mAP: 81.9%  Rank-1: 93.0%  Rank-5: 97.6%  Rank-10: 98.8%
+2026-09-21 15:31:49,006 transreid INFO: [holistic         ] mAP: 82.9%  Rank-1: 93.3%  Rank-5: 97.7%  Rank-10: 98.8%
+2026-09-21 15:31:51,784 transreid INFO: [part_lse         ] mAP: 79.6%  Rank-1: 90.8%  Rank-5: 97.0%  Rank-10: 98.2%
+2026-09-21 15:31:51,894 transreid INFO: best so far: clipreid_baseline mAP 81.9% R1 93.0% @epoch 34 | holistic mAP 82.9% R1 93.3% @epoch 34 | part_lse mAP 79.6% R1 90.8% @epoch 34
+2026-09-21 15:31:57,333 transreid INFO: Epoch[35] Iteration[50/185] Loss: 6.252 (id 2.425 tri 0.114 i2t 1.274 | part_id 1.225 part_tri 0.037 part_i2t 1.746 pix 0.867) Acc: 0.991, Base Lr: 3.50e-04
+2026-09-21 15:32:02,278 transreid INFO: Epoch[35] Iteration[100/185] Loss: 6.179 (id 2.413 tri 0.110 i2t 1.261 | part_id 1.216 part_tri 0.034 part_i2t 1.682 pix 0.866) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:32:07,205 transreid INFO: Epoch[35] Iteration[150/185] Loss: 6.095 (id 2.388 tri 0.108 i2t 1.243 | part_id 1.202 part_tri 0.033 part_i2t 1.632 pix 0.869) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:32:10,037 transreid INFO: Epoch 35 done. Loss: 6.051 Time per batch: 0.099[s] Speed: 645.6[samples/s]
+2026-09-21 15:32:15,529 transreid INFO: Epoch[36] Iteration[50/185] Loss: 6.198 (id 2.413 tri 0.122 i2t 1.257 | part_id 1.217 part_tri 0.040 part_i2t 1.690 pix 0.867) Acc: 0.995, Base Lr: 3.50e-04
+2026-09-21 15:32:20,389 transreid INFO: Epoch[36] Iteration[100/185] Loss: 6.083 (id 2.385 tri 0.101 i2t 1.237 | part_id 1.201 part_tri 0.033 part_i2t 1.645 pix 0.867) Acc: 0.996, Base Lr: 3.50e-04
+2026-09-21 15:32:25,315 transreid INFO: Epoch[36] Iteration[150/185] Loss: 6.017 (id 2.368 tri 0.099 i2t 1.226 | part_id 1.191 part_tri 0.031 part_i2t 1.597 pix 0.867) Acc: 0.996, Base Lr: 3.50e-04
+2026-09-21 15:32:28,119 transreid INFO: Epoch 36 done. Loss: 5.970 Time per batch: 0.099[s] Speed: 647.8[samples/s]
+2026-09-21 15:32:38,531 transreid INFO: Validation Results - Epoch: 36
+2026-09-21 15:32:38,531 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.9079999923706055, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.020999999716877937, 'legs': 0.006000000052154064, 'feet': 0.4880000054836273} | gallery: {'global': 0.0, 'head': 0.9100000262260437, 'upper_arms_torso': 0.041999999433755875, 'lower_arms_torso': 0.10199999809265137, 'legs': 0.04699999839067459, 'feet': 0.5320000052452087}
+2026-09-21 15:32:38,596 transreid INFO: query-gallery pairs with >=1 unmatched part: 99.8% | with no shared part: 1.94% | mean unmatched parts: 1.97
+2026-09-21 15:32:41,416 transreid INFO: [clipreid_baseline] mAP: 78.8%  Rank-1: 91.7%  Rank-5: 97.8%  Rank-10: 98.6%
+2026-09-21 15:32:44,150 transreid INFO: [holistic         ] mAP: 79.9%  Rank-1: 92.0%  Rank-5: 97.6%  Rank-10: 98.5%
+2026-09-21 15:32:46,859 transreid INFO: [part_lse         ] mAP: 74.9%  Rank-1: 88.2%  Rank-5: 96.1%  Rank-10: 98.0%
+2026-09-21 15:32:46,972 transreid INFO: best so far: clipreid_baseline mAP 81.9% R1 93.0% @epoch 34 | holistic mAP 82.9% R1 93.3% @epoch 34 | part_lse mAP 79.6% R1 90.8% @epoch 34
+2026-09-21 15:32:52,465 transreid INFO: Epoch[37] Iteration[50/185] Loss: 6.170 (id 2.415 tri 0.103 i2t 1.257 | part_id 1.217 part_tri 0.035 part_i2t 1.683 pix 0.862) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:32:57,426 transreid INFO: Epoch[37] Iteration[100/185] Loss: 6.098 (id 2.397 tri 0.100 i2t 1.244 | part_id 1.209 part_tri 0.033 part_i2t 1.626 pix 0.864) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:33:02,382 transreid INFO: Epoch[37] Iteration[150/185] Loss: 6.066 (id 2.387 tri 0.099 i2t 1.240 | part_id 1.204 part_tri 0.031 part_i2t 1.601 pix 0.865) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:33:05,311 transreid INFO: Epoch 37 done. Loss: 6.012 Time per batch: 0.100[s] Speed: 642.2[samples/s]
+2026-09-21 15:33:10,880 transreid INFO: Epoch[38] Iteration[50/185] Loss: 6.327 (id 2.459 tri 0.123 i2t 1.289 | part_id 1.247 part_tri 0.039 part_i2t 1.733 pix 0.869) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:33:15,760 transreid INFO: Epoch[38] Iteration[100/185] Loss: 6.208 (id 2.427 tri 0.115 i2t 1.264 | part_id 1.226 part_tri 0.035 part_i2t 1.673 pix 0.870) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:33:20,595 transreid INFO: Epoch[38] Iteration[150/185] Loss: 6.120 (id 2.403 tri 0.107 i2t 1.251 | part_id 1.212 part_tri 0.032 part_i2t 1.622 pix 0.867) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:33:23,564 transreid INFO: Epoch 38 done. Loss: 6.056 Time per batch: 0.099[s] Speed: 645.2[samples/s]
+2026-09-21 15:33:34,015 transreid INFO: Validation Results - Epoch: 38
+2026-09-21 15:33:34,016 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.7009999752044678, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004999999888241291, 'legs': 0.0020000000949949026, 'feet': 0.3050000071525574} | gallery: {'global': 0.0, 'head': 0.7289999723434448, 'upper_arms_torso': 0.03700000047683716, 'lower_arms_torso': 0.06800000369548798, 'legs': 0.027000000700354576, 'feet': 0.39100000262260437}
+2026-09-21 15:33:34,079 transreid INFO: query-gallery pairs with >=1 unmatched part: 96.2% | with no shared part: 1.22% | mean unmatched parts: 1.63
+2026-09-21 15:33:36,901 transreid INFO: [clipreid_baseline] mAP: 79.5%  Rank-1: 91.9%  Rank-5: 97.1%  Rank-10: 98.0%
+2026-09-21 15:33:39,632 transreid INFO: [holistic         ] mAP: 80.2%  Rank-1: 91.7%  Rank-5: 97.1%  Rank-10: 98.0%
+2026-09-21 15:33:42,364 transreid INFO: [part_lse         ] mAP: 77.0%  Rank-1: 89.9%  Rank-5: 96.6%  Rank-10: 97.7%
+2026-09-21 15:33:42,481 transreid INFO: best so far: clipreid_baseline mAP 81.9% R1 93.0% @epoch 34 | holistic mAP 82.9% R1 93.3% @epoch 34 | part_lse mAP 79.6% R1 90.8% @epoch 34
+2026-09-21 15:33:47,977 transreid INFO: Epoch[39] Iteration[50/185] Loss: 6.193 (id 2.414 tri 0.111 i2t 1.290 | part_id 1.212 part_tri 0.033 part_i2t 1.664 pix 0.858) Acc: 0.992, Base Lr: 3.50e-04
+2026-09-21 15:33:52,875 transreid INFO: Epoch[39] Iteration[100/185] Loss: 6.145 (id 2.406 tri 0.109 i2t 1.267 | part_id 1.211 part_tri 0.032 part_i2t 1.636 pix 0.863) Acc: 0.994, Base Lr: 3.50e-04
+2026-09-21 15:33:57,846 transreid INFO: Epoch[39] Iteration[150/185] Loss: 6.090 (id 2.393 tri 0.105 i2t 1.253 | part_id 1.205 part_tri 0.031 part_i2t 1.599 pix 0.866) Acc: 0.993, Base Lr: 3.50e-04
+2026-09-21 15:34:00,711 transreid INFO: Epoch 39 done. Loss: 6.032 Time per batch: 0.100[s] Speed: 642.5[samples/s]
+2026-09-21 15:34:06,150 transreid INFO: Epoch[40] Iteration[50/185] Loss: 6.078 (id 2.380 tri 0.098 i2t 1.260 | part_id 1.203 part_tri 0.028 part_i2t 1.611 pix 0.864) Acc: 0.995, Base Lr: 3.50e-05
+2026-09-21 15:34:11,130 transreid INFO: Epoch[40] Iteration[100/185] Loss: 5.874 (id 2.328 tri 0.081 i2t 1.213 | part_id 1.173 part_tri 0.022 part_i2t 1.512 pix 0.860) Acc: 0.996, Base Lr: 3.50e-05
+2026-09-21 15:34:16,088 transreid INFO: Epoch[40] Iteration[150/185] Loss: 5.778 (id 2.304 tri 0.076 i2t 1.190 | part_id 1.158 part_tri 0.020 part_i2t 1.462 pix 0.856) Acc: 0.997, Base Lr: 3.50e-05
+2026-09-21 15:34:19,013 transreid INFO: Epoch 40 done. Loss: 5.713 Time per batch: 0.099[s] Speed: 643.5[samples/s]
+2026-09-21 15:34:19,297 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage2/RN50_part_stage2_40.pth
+2026-09-21 15:34:29,685 transreid INFO: Validation Results - Epoch: 40
+2026-09-21 15:34:29,685 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.675000011920929, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004000000189989805, 'legs': 0.0020000000949949026, 'feet': 0.30000001192092896} | gallery: {'global': 0.0, 'head': 0.7139999866485596, 'upper_arms_torso': 0.028999999165534973, 'lower_arms_torso': 0.06700000166893005, 'legs': 0.028999999165534973, 'feet': 0.37299999594688416}
+2026-09-21 15:34:29,749 transreid INFO: query-gallery pairs with >=1 unmatched part: 95.6% | with no shared part: 1.06% | mean unmatched parts: 1.60
+2026-09-21 15:34:32,571 transreid INFO: [clipreid_baseline] mAP: 85.8%  Rank-1: 94.4%  Rank-5: 98.2%  Rank-10: 98.8%
+2026-09-21 15:34:35,335 transreid INFO: [holistic         ] mAP: 86.5%  Rank-1: 94.8%  Rank-5: 98.2%  Rank-10: 98.9%
+2026-09-21 15:34:38,074 transreid INFO: [part_lse         ] mAP: 82.8%  Rank-1: 92.4%  Rank-5: 97.3%  Rank-10: 98.4%
+2026-09-21 15:34:38,187 transreid INFO: best so far: clipreid_baseline mAP 85.8% R1 94.4% @epoch 40 | holistic mAP 86.5% R1 94.8% @epoch 40 | part_lse mAP 82.8% R1 92.4% @epoch 40
+2026-09-21 15:34:43,720 transreid INFO: Epoch[41] Iteration[50/185] Loss: 5.606 (id 2.247 tri 0.065 i2t 1.146 | part_id 1.119 part_tri 0.017 part_i2t 1.429 pix 0.847) Acc: 0.997, Base Lr: 3.50e-05
+2026-09-21 15:34:48,757 transreid INFO: Epoch[41] Iteration[100/185] Loss: 5.569 (id 2.240 tri 0.064 i2t 1.137 | part_id 1.115 part_tri 0.016 part_i2t 1.399 pix 0.846) Acc: 0.997, Base Lr: 3.50e-05
+2026-09-21 15:34:53,762 transreid INFO: Epoch[41] Iteration[150/185] Loss: 5.523 (id 2.229 tri 0.058 i2t 1.130 | part_id 1.109 part_tri 0.014 part_i2t 1.374 pix 0.847) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:34:56,800 transreid INFO: Epoch 41 done. Loss: 5.493 Time per batch: 0.101[s] Speed: 632.7[samples/s]
+2026-09-21 15:35:02,411 transreid INFO: Epoch[42] Iteration[50/185] Loss: 5.491 (id 2.217 tri 0.050 i2t 1.124 | part_id 1.104 part_tri 0.012 part_i2t 1.379 pix 0.844) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:35:07,413 transreid INFO: Epoch[42] Iteration[100/185] Loss: 5.459 (id 2.208 tri 0.049 i2t 1.118 | part_id 1.099 part_tri 0.012 part_i2t 1.358 pix 0.843) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:35:12,381 transreid INFO: Epoch[42] Iteration[150/185] Loss: 5.428 (id 2.200 tri 0.046 i2t 1.113 | part_id 1.094 part_tri 0.011 part_i2t 1.339 pix 0.842) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:35:15,380 transreid INFO: Epoch 42 done. Loss: 5.403 Time per batch: 0.101[s] Speed: 633.8[samples/s]
+2026-09-21 15:35:25,869 transreid INFO: Validation Results - Epoch: 42
+2026-09-21 15:35:25,870 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.5649999976158142, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004999999888241291, 'legs': 0.0010000000474974513, 'feet': 0.335999995470047} | gallery: {'global': 0.0, 'head': 0.6190000176429749, 'upper_arms_torso': 0.03500000014901161, 'lower_arms_torso': 0.07900000363588333, 'legs': 0.039000000804662704, 'feet': 0.41200000047683716}
+2026-09-21 15:35:25,932 transreid INFO: query-gallery pairs with >=1 unmatched part: 92.8% | with no shared part: 1.53% | mean unmatched parts: 1.60
+2026-09-21 15:35:28,726 transreid INFO: [clipreid_baseline] mAP: 87.1%  Rank-1: 94.8%  Rank-5: 98.4%  Rank-10: 98.9%
+2026-09-21 15:35:31,527 transreid INFO: [holistic         ] mAP: 87.3%  Rank-1: 94.8%  Rank-5: 98.3%  Rank-10: 99.0%
+2026-09-21 15:35:34,254 transreid INFO: [part_lse         ] mAP: 83.1%  Rank-1: 92.4%  Rank-5: 97.5%  Rank-10: 98.7%
+2026-09-21 15:35:34,369 transreid INFO: best so far: clipreid_baseline mAP 87.1% R1 94.8% @epoch 42 | holistic mAP 87.3% R1 94.8% @epoch 42 | part_lse mAP 83.1% R1 92.4% @epoch 42
+2026-09-21 15:35:39,867 transreid INFO: Epoch[43] Iteration[50/185] Loss: 5.451 (id 2.201 tri 0.050 i2t 1.116 | part_id 1.095 part_tri 0.012 part_i2t 1.368 pix 0.837) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:35:44,784 transreid INFO: Epoch[43] Iteration[100/185] Loss: 5.409 (id 2.191 tri 0.043 i2t 1.110 | part_id 1.090 part_tri 0.010 part_i2t 1.345 pix 0.835) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:35:49,741 transreid INFO: Epoch[43] Iteration[150/185] Loss: 5.381 (id 2.185 tri 0.041 i2t 1.105 | part_id 1.086 part_tri 0.010 part_i2t 1.325 pix 0.834) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:35:52,497 transreid INFO: Epoch 43 done. Loss: 5.366 Time per batch: 0.099[s] Speed: 646.1[samples/s]
+2026-09-21 15:35:57,951 transreid INFO: Epoch[44] Iteration[50/185] Loss: 5.429 (id 2.197 tri 0.048 i2t 1.113 | part_id 1.092 part_tri 0.012 part_i2t 1.350 pix 0.833) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:36:02,890 transreid INFO: Epoch[44] Iteration[100/185] Loss: 5.391 (id 2.188 tri 0.042 i2t 1.107 | part_id 1.087 part_tri 0.011 part_i2t 1.332 pix 0.830) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:36:07,830 transreid INFO: Epoch[44] Iteration[150/185] Loss: 5.363 (id 2.180 tri 0.039 i2t 1.102 | part_id 1.083 part_tri 0.010 part_i2t 1.316 pix 0.831) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:36:10,798 transreid INFO: Epoch 44 done. Loss: 5.343 Time per batch: 0.099[s] Speed: 643.5[samples/s]
+2026-09-21 15:36:21,275 transreid INFO: Validation Results - Epoch: 44
+2026-09-21 15:36:21,278 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.44200000166893005, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004999999888241291, 'legs': 0.0010000000474974513, 'feet': 0.30000001192092896} | gallery: {'global': 0.0, 'head': 0.515999972820282, 'upper_arms_torso': 0.03400000184774399, 'lower_arms_torso': 0.07100000232458115, 'legs': 0.035999998450279236, 'feet': 0.37700000405311584}
+2026-09-21 15:36:21,340 transreid INFO: query-gallery pairs with >=1 unmatched part: 87.1% | with no shared part: 1.35% | mean unmatched parts: 1.44
+2026-09-21 15:36:24,143 transreid INFO: [clipreid_baseline] mAP: 87.5%  Rank-1: 94.9%  Rank-5: 98.4%  Rank-10: 99.0%
+2026-09-21 15:36:26,874 transreid INFO: [holistic         ] mAP: 87.9%  Rank-1: 95.2%  Rank-5: 98.3%  Rank-10: 99.1%
+2026-09-21 15:36:29,614 transreid INFO: [part_lse         ] mAP: 83.7%  Rank-1: 92.4%  Rank-5: 97.5%  Rank-10: 98.5%
+2026-09-21 15:36:29,726 transreid INFO: best so far: clipreid_baseline mAP 87.5% R1 94.9% @epoch 44 | holistic mAP 87.9% R1 95.2% @epoch 44 | part_lse mAP 83.7% R1 92.4% @epoch 44
+2026-09-21 15:36:35,373 transreid INFO: Epoch[45] Iteration[50/185] Loss: 5.398 (id 2.194 tri 0.033 i2t 1.109 | part_id 1.092 part_tri 0.008 part_i2t 1.345 pix 0.830) Acc: 0.996, Base Lr: 3.50e-05
+2026-09-21 15:36:40,255 transreid INFO: Epoch[45] Iteration[100/185] Loss: 5.367 (id 2.184 tri 0.033 i2t 1.103 | part_id 1.087 part_tri 0.009 part_i2t 1.326 pix 0.827) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:36:45,244 transreid INFO: Epoch[45] Iteration[150/185] Loss: 5.354 (id 2.179 tri 0.038 i2t 1.100 | part_id 1.084 part_tri 0.009 part_i2t 1.309 pix 0.826) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:36:48,116 transreid INFO: Epoch 45 done. Loss: 5.336 Time per batch: 0.100[s] Speed: 636.9[samples/s]
+2026-09-21 15:36:53,626 transreid INFO: Epoch[46] Iteration[50/185] Loss: 5.348 (id 2.173 tri 0.033 i2t 1.101 | part_id 1.081 part_tri 0.007 part_i2t 1.328 pix 0.825) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:36:58,592 transreid INFO: Epoch[46] Iteration[100/185] Loss: 5.324 (id 2.168 tri 0.031 i2t 1.096 | part_id 1.077 part_tri 0.007 part_i2t 1.312 pix 0.824) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:37:03,523 transreid INFO: Epoch[46] Iteration[150/185] Loss: 5.305 (id 2.164 tri 0.030 i2t 1.093 | part_id 1.075 part_tri 0.007 part_i2t 1.296 pix 0.823) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:37:06,348 transreid INFO: Epoch 46 done. Loss: 5.291 Time per batch: 0.100[s] Speed: 638.9[samples/s]
+2026-09-21 15:37:16,787 transreid INFO: Validation Results - Epoch: 46
+2026-09-21 15:37:16,787 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.414000004529953, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004000000189989805, 'legs': 0.0010000000474974513, 'feet': 0.3409999907016754} | gallery: {'global': 0.0, 'head': 0.4970000088214874, 'upper_arms_torso': 0.035999998450279236, 'lower_arms_torso': 0.06700000166893005, 'legs': 0.03799999877810478, 'feet': 0.4099999964237213}
+2026-09-21 15:37:16,850 transreid INFO: query-gallery pairs with >=1 unmatched part: 87.2% | with no shared part: 1.43% | mean unmatched parts: 1.46
+2026-09-21 15:37:19,668 transreid INFO: [clipreid_baseline] mAP: 87.9%  Rank-1: 94.8%  Rank-5: 98.3%  Rank-10: 99.0%
+2026-09-21 15:37:22,399 transreid INFO: [holistic         ] mAP: 88.1%  Rank-1: 95.1%  Rank-5: 98.4%  Rank-10: 99.0%
+2026-09-21 15:37:25,143 transreid INFO: [part_lse         ] mAP: 83.7%  Rank-1: 91.7%  Rank-5: 97.9%  Rank-10: 98.7%
+2026-09-21 15:37:25,262 transreid INFO: best so far: clipreid_baseline mAP 87.9% R1 94.8% @epoch 46 | holistic mAP 88.1% R1 95.1% @epoch 46 | part_lse mAP 83.7% R1 91.7% @epoch 46
+2026-09-21 15:37:30,766 transreid INFO: Epoch[47] Iteration[50/185] Loss: 5.337 (id 2.171 tri 0.031 i2t 1.096 | part_id 1.079 part_tri 0.010 part_i2t 1.323 pix 0.820) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:37:35,687 transreid INFO: Epoch[47] Iteration[100/185] Loss: 5.308 (id 2.164 tri 0.029 i2t 1.091 | part_id 1.076 part_tri 0.009 part_i2t 1.305 pix 0.819) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:37:40,557 transreid INFO: Epoch[47] Iteration[150/185] Loss: 5.287 (id 2.157 tri 0.028 i2t 1.089 | part_id 1.072 part_tri 0.008 part_i2t 1.290 pix 0.820) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:37:43,414 transreid INFO: Epoch 47 done. Loss: 5.272 Time per batch: 0.099[s] Speed: 645.2[samples/s]
+2026-09-21 15:37:49,071 transreid INFO: Epoch[48] Iteration[50/185] Loss: 5.348 (id 2.175 tri 0.038 i2t 1.098 | part_id 1.081 part_tri 0.009 part_i2t 1.325 pix 0.817) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:37:54,064 transreid INFO: Epoch[48] Iteration[100/185] Loss: 5.328 (id 2.170 tri 0.038 i2t 1.094 | part_id 1.079 part_tri 0.009 part_i2t 1.305 pix 0.815) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:37:59,200 transreid INFO: Epoch[48] Iteration[150/185] Loss: 5.297 (id 2.161 tri 0.034 i2t 1.089 | part_id 1.075 part_tri 0.008 part_i2t 1.288 pix 0.816) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:38:02,226 transreid INFO: Epoch 48 done. Loss: 5.278 Time per batch: 0.102[s] Speed: 626.0[samples/s]
+2026-09-21 15:38:12,743 transreid INFO: Validation Results - Epoch: 48
+2026-09-21 15:38:12,744 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.3059999942779541, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004999999888241291, 'legs': 0.0020000000949949026, 'feet': 0.36000001430511475} | gallery: {'global': 0.0, 'head': 0.41600000858306885, 'upper_arms_torso': 0.03700000047683716, 'lower_arms_torso': 0.07000000029802322, 'legs': 0.039000000804662704, 'feet': 0.4300000071525574}
+2026-09-21 15:38:12,807 transreid INFO: query-gallery pairs with >=1 unmatched part: 83.4% | with no shared part: 1.43% | mean unmatched parts: 1.38
+2026-09-21 15:38:15,630 transreid INFO: [clipreid_baseline] mAP: 88.2%  Rank-1: 95.0%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:38:18,397 transreid INFO: [holistic         ] mAP: 88.3%  Rank-1: 95.2%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:38:21,158 transreid INFO: [part_lse         ] mAP: 83.9%  Rank-1: 92.3%  Rank-5: 97.5%  Rank-10: 98.7%
+2026-09-21 15:38:21,279 transreid INFO: best so far: clipreid_baseline mAP 88.2% R1 95.0% @epoch 48 | holistic mAP 88.3% R1 95.2% @epoch 48 | part_lse mAP 83.9% R1 92.3% @epoch 48
+2026-09-21 15:38:26,911 transreid INFO: Epoch[49] Iteration[50/185] Loss: 5.293 (id 2.159 tri 0.028 i2t 1.090 | part_id 1.074 part_tri 0.007 part_i2t 1.298 pix 0.818) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:38:31,901 transreid INFO: Epoch[49] Iteration[100/185] Loss: 5.287 (id 2.157 tri 0.032 i2t 1.088 | part_id 1.073 part_tri 0.008 part_i2t 1.290 pix 0.815) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:38:36,863 transreid INFO: Epoch[49] Iteration[150/185] Loss: 5.271 (id 2.153 tri 0.031 i2t 1.085 | part_id 1.071 part_tri 0.007 part_i2t 1.278 pix 0.815) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:38:39,666 transreid INFO: Epoch 49 done. Loss: 5.253 Time per batch: 0.100[s] Speed: 637.0[samples/s]
+2026-09-21 15:38:45,410 transreid INFO: Epoch[50] Iteration[50/185] Loss: 5.317 (id 2.168 tri 0.033 i2t 1.091 | part_id 1.079 part_tri 0.008 part_i2t 1.309 pix 0.810) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:38:50,495 transreid INFO: Epoch[50] Iteration[100/185] Loss: 5.295 (id 2.161 tri 0.032 i2t 1.089 | part_id 1.075 part_tri 0.008 part_i2t 1.293 pix 0.811) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:38:55,586 transreid INFO: Epoch[50] Iteration[150/185] Loss: 5.270 (id 2.155 tri 0.029 i2t 1.085 | part_id 1.071 part_tri 0.007 part_i2t 1.279 pix 0.812) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:38:58,522 transreid INFO: Epoch 50 done. Loss: 5.255 Time per batch: 0.103[s] Speed: 621.1[samples/s]
+2026-09-21 15:39:09,017 transreid INFO: Validation Results - Epoch: 50
+2026-09-21 15:39:09,017 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.2930000126361847, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004999999888241291, 'legs': 0.0010000000474974513, 'feet': 0.2980000078678131} | gallery: {'global': 0.0, 'head': 0.41100001335144043, 'upper_arms_torso': 0.03700000047683716, 'lower_arms_torso': 0.06599999964237213, 'legs': 0.039000000804662704, 'feet': 0.3700000047683716}
+2026-09-21 15:39:09,081 transreid INFO: query-gallery pairs with >=1 unmatched part: 79.7% | with no shared part: 1.50% | mean unmatched parts: 1.29
+2026-09-21 15:39:11,923 transreid INFO: [clipreid_baseline] mAP: 88.4%  Rank-1: 95.1%  Rank-5: 98.3%  Rank-10: 99.0%
+2026-09-21 15:39:14,732 transreid INFO: [holistic         ] mAP: 88.4%  Rank-1: 95.0%  Rank-5: 98.5%  Rank-10: 99.2%
+2026-09-21 15:39:17,467 transreid INFO: [part_lse         ] mAP: 84.4%  Rank-1: 92.9%  Rank-5: 97.8%  Rank-10: 98.8%
+2026-09-21 15:39:17,582 transreid INFO: best so far: clipreid_baseline mAP 88.4% R1 95.1% @epoch 50 | holistic mAP 88.4% R1 95.0% @epoch 50 | part_lse mAP 84.4% R1 92.9% @epoch 50
+2026-09-21 15:39:23,302 transreid INFO: Epoch[51] Iteration[50/185] Loss: 5.317 (id 2.170 tri 0.033 i2t 1.091 | part_id 1.078 part_tri 0.008 part_i2t 1.303 pix 0.815) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:39:28,315 transreid INFO: Epoch[51] Iteration[100/185] Loss: 5.285 (id 2.160 tri 0.031 i2t 1.087 | part_id 1.073 part_tri 0.008 part_i2t 1.285 pix 0.812) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:39:33,363 transreid INFO: Epoch[51] Iteration[150/185] Loss: 5.264 (id 2.154 tri 0.029 i2t 1.084 | part_id 1.070 part_tri 0.007 part_i2t 1.273 pix 0.811) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:39:36,200 transreid INFO: Epoch 51 done. Loss: 5.247 Time per batch: 0.102[s] Speed: 629.1[samples/s]
+2026-09-21 15:39:41,914 transreid INFO: Epoch[52] Iteration[50/185] Loss: 5.302 (id 2.164 tri 0.035 i2t 1.089 | part_id 1.075 part_tri 0.009 part_i2t 1.296 pix 0.807) Acc: 0.998, Base Lr: 3.50e-05
+2026-09-21 15:39:47,062 transreid INFO: Epoch[52] Iteration[100/185] Loss: 5.275 (id 2.156 tri 0.032 i2t 1.085 | part_id 1.071 part_tri 0.008 part_i2t 1.281 pix 0.807) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:39:52,146 transreid INFO: Epoch[52] Iteration[150/185] Loss: 5.254 (id 2.150 tri 0.030 i2t 1.082 | part_id 1.068 part_tri 0.007 part_i2t 1.268 pix 0.808) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:39:55,064 transreid INFO: Epoch 52 done. Loss: 5.239 Time per batch: 0.103[s] Speed: 620.9[samples/s]
+2026-09-21 15:40:05,616 transreid INFO: Validation Results - Epoch: 52
+2026-09-21 15:40:05,617 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.2549999952316284, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004999999888241291, 'legs': 0.003000000026077032, 'feet': 0.33000001311302185} | gallery: {'global': 0.0, 'head': 0.37299999594688416, 'upper_arms_torso': 0.035999998450279236, 'lower_arms_torso': 0.07400000095367432, 'legs': 0.04699999839067459, 'feet': 0.40400001406669617}
+2026-09-21 15:40:05,681 transreid INFO: query-gallery pairs with >=1 unmatched part: 79.2% | with no shared part: 1.61% | mean unmatched parts: 1.30
+2026-09-21 15:40:08,503 transreid INFO: [clipreid_baseline] mAP: 88.3%  Rank-1: 95.1%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 15:40:11,260 transreid INFO: [holistic         ] mAP: 88.3%  Rank-1: 95.6%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 15:40:13,964 transreid INFO: [part_lse         ] mAP: 84.1%  Rank-1: 92.5%  Rank-5: 97.9%  Rank-10: 98.8%
+2026-09-21 15:40:14,089 transreid INFO: best so far: clipreid_baseline mAP 88.4% R1 95.1% @epoch 50 | holistic mAP 88.4% R1 95.0% @epoch 50 | part_lse mAP 84.4% R1 92.9% @epoch 50
+2026-09-21 15:40:19,830 transreid INFO: Epoch[53] Iteration[50/185] Loss: 5.260 (id 2.156 tri 0.020 i2t 1.086 | part_id 1.070 part_tri 0.005 part_i2t 1.280 pix 0.808) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:40:24,826 transreid INFO: Epoch[53] Iteration[100/185] Loss: 5.260 (id 2.154 tri 0.024 i2t 1.085 | part_id 1.071 part_tri 0.006 part_i2t 1.274 pix 0.808) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:40:29,943 transreid INFO: Epoch[53] Iteration[150/185] Loss: 5.243 (id 2.149 tri 0.025 i2t 1.081 | part_id 1.068 part_tri 0.006 part_i2t 1.264 pix 0.807) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:40:32,931 transreid INFO: Epoch 53 done. Loss: 5.227 Time per batch: 0.103[s] Speed: 621.6[samples/s]
+2026-09-21 15:40:38,677 transreid INFO: Epoch[54] Iteration[50/185] Loss: 5.280 (id 2.164 tri 0.024 i2t 1.088 | part_id 1.075 part_tri 0.006 part_i2t 1.281 pix 0.806) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:40:43,859 transreid INFO: Epoch[54] Iteration[100/185] Loss: 5.257 (id 2.156 tri 0.022 i2t 1.084 | part_id 1.071 part_tri 0.006 part_i2t 1.273 pix 0.805) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:40:49,046 transreid INFO: Epoch[54] Iteration[150/185] Loss: 5.235 (id 2.147 tri 0.022 i2t 1.081 | part_id 1.067 part_tri 0.006 part_i2t 1.261 pix 0.805) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:40:52,249 transreid INFO: Epoch 54 done. Loss: 5.216 Time per batch: 0.104[s] Speed: 612.9[samples/s]
+2026-09-21 15:41:02,867 transreid INFO: Validation Results - Epoch: 54
+2026-09-21 15:41:02,867 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.21699999272823334, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004000000189989805, 'legs': 0.0020000000949949026, 'feet': 0.28700000047683716} | gallery: {'global': 0.0, 'head': 0.3440000116825104, 'upper_arms_torso': 0.03999999910593033, 'lower_arms_torso': 0.06400000303983688, 'legs': 0.039000000804662704, 'feet': 0.36399999260902405}
+2026-09-21 15:41:02,929 transreid INFO: query-gallery pairs with >=1 unmatched part: 74.1% | with no shared part: 1.49% | mean unmatched parts: 1.18
+2026-09-21 15:41:05,756 transreid INFO: [clipreid_baseline] mAP: 88.6%  Rank-1: 95.4%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:41:08,531 transreid INFO: [holistic         ] mAP: 88.7%  Rank-1: 95.5%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 15:41:11,281 transreid INFO: [part_lse         ] mAP: 84.4%  Rank-1: 92.2%  Rank-5: 97.7%  Rank-10: 98.8%
+2026-09-21 15:41:11,396 transreid INFO: best so far: clipreid_baseline mAP 88.6% R1 95.4% @epoch 54 | holistic mAP 88.7% R1 95.5% @epoch 54 | part_lse mAP 84.4% R1 92.2% @epoch 54
+2026-09-21 15:41:17,071 transreid INFO: Epoch[55] Iteration[50/185] Loss: 5.263 (id 2.154 tri 0.025 i2t 1.085 | part_id 1.072 part_tri 0.006 part_i2t 1.280 pix 0.802) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:41:22,171 transreid INFO: Epoch[55] Iteration[100/185] Loss: 5.245 (id 2.149 tri 0.026 i2t 1.082 | part_id 1.069 part_tri 0.006 part_i2t 1.267 pix 0.803) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:41:27,282 transreid INFO: Epoch[55] Iteration[150/185] Loss: 5.224 (id 2.141 tri 0.025 i2t 1.078 | part_id 1.065 part_tri 0.006 part_i2t 1.256 pix 0.803) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:41:30,242 transreid INFO: Epoch 55 done. Loss: 5.209 Time per batch: 0.103[s] Speed: 621.5[samples/s]
+2026-09-21 15:41:35,995 transreid INFO: Epoch[56] Iteration[50/185] Loss: 5.270 (id 2.157 tri 0.028 i2t 1.085 | part_id 1.072 part_tri 0.008 part_i2t 1.282 pix 0.798) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:41:41,172 transreid INFO: Epoch[56] Iteration[100/185] Loss: 5.250 (id 2.151 tri 0.028 i2t 1.081 | part_id 1.069 part_tri 0.007 part_i2t 1.268 pix 0.800) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:41:46,279 transreid INFO: Epoch[56] Iteration[150/185] Loss: 5.230 (id 2.144 tri 0.028 i2t 1.078 | part_id 1.066 part_tri 0.007 part_i2t 1.255 pix 0.799) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:41:49,367 transreid INFO: Epoch 56 done. Loss: 5.210 Time per batch: 0.104[s] Speed: 615.8[samples/s]
+2026-09-21 15:41:59,823 transreid INFO: Validation Results - Epoch: 56
+2026-09-21 15:41:59,823 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.20200000703334808, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.004999999888241291, 'feet': 0.2759999930858612} | gallery: {'global': 0.0, 'head': 0.33399999141693115, 'upper_arms_torso': 0.03999999910593033, 'lower_arms_torso': 0.06800000369548798, 'legs': 0.04399999976158142, 'feet': 0.35499998927116394}
+2026-09-21 15:41:59,888 transreid INFO: query-gallery pairs with >=1 unmatched part: 72.7% | with no shared part: 1.60% | mean unmatched parts: 1.16
+2026-09-21 15:42:02,711 transreid INFO: [clipreid_baseline] mAP: 88.4%  Rank-1: 95.1%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:42:05,467 transreid INFO: [holistic         ] mAP: 88.6%  Rank-1: 95.5%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 15:42:08,237 transreid INFO: [part_lse         ] mAP: 84.3%  Rank-1: 92.0%  Rank-5: 97.8%  Rank-10: 98.9%
+2026-09-21 15:42:08,351 transreid INFO: best so far: clipreid_baseline mAP 88.6% R1 95.4% @epoch 54 | holistic mAP 88.7% R1 95.5% @epoch 54 | part_lse mAP 84.4% R1 92.2% @epoch 54
+2026-09-21 15:42:14,015 transreid INFO: Epoch[57] Iteration[50/185] Loss: 5.251 (id 2.154 tri 0.023 i2t 1.085 | part_id 1.070 part_tri 0.005 part_i2t 1.267 pix 0.803) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:42:19,171 transreid INFO: Epoch[57] Iteration[100/185] Loss: 5.237 (id 2.149 tri 0.025 i2t 1.082 | part_id 1.067 part_tri 0.006 part_i2t 1.260 pix 0.799) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:42:24,299 transreid INFO: Epoch[57] Iteration[150/185] Loss: 5.221 (id 2.142 tri 0.025 i2t 1.079 | part_id 1.064 part_tri 0.005 part_i2t 1.251 pix 0.799) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:42:27,299 transreid INFO: Epoch 57 done. Loss: 5.203 Time per batch: 0.104[s] Speed: 618.1[samples/s]
+2026-09-21 15:42:33,066 transreid INFO: Epoch[58] Iteration[50/185] Loss: 5.248 (id 2.154 tri 0.022 i2t 1.084 | part_id 1.070 part_tri 0.005 part_i2t 1.266 pix 0.801) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:42:38,311 transreid INFO: Epoch[58] Iteration[100/185] Loss: 5.232 (id 2.147 tri 0.026 i2t 1.080 | part_id 1.066 part_tri 0.006 part_i2t 1.258 pix 0.797) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:42:43,473 transreid INFO: Epoch[58] Iteration[150/185] Loss: 5.208 (id 2.139 tri 0.023 i2t 1.076 | part_id 1.062 part_tri 0.005 part_i2t 1.246 pix 0.797) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:42:46,426 transreid INFO: Epoch 58 done. Loss: 5.190 Time per batch: 0.105[s] Speed: 612.4[samples/s]
+2026-09-21 15:42:56,884 transreid INFO: Validation Results - Epoch: 58
+2026-09-21 15:42:56,886 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.19499999284744263, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004000000189989805, 'legs': 0.004000000189989805, 'feet': 0.2840000092983246} | gallery: {'global': 0.0, 'head': 0.32100000977516174, 'upper_arms_torso': 0.0430000014603138, 'lower_arms_torso': 0.07000000029802322, 'legs': 0.04100000113248825, 'feet': 0.3569999933242798}
+2026-09-21 15:42:56,949 transreid INFO: query-gallery pairs with >=1 unmatched part: 71.9% | with no shared part: 1.71% | mean unmatched parts: 1.15
+2026-09-21 15:42:59,768 transreid INFO: [clipreid_baseline] mAP: 88.6%  Rank-1: 95.4%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 15:43:02,584 transreid INFO: [holistic         ] mAP: 88.6%  Rank-1: 95.6%  Rank-5: 98.6%  Rank-10: 99.1%
+2026-09-21 15:43:05,293 transreid INFO: [part_lse         ] mAP: 84.1%  Rank-1: 92.0%  Rank-5: 97.9%  Rank-10: 98.8%
+2026-09-21 15:43:05,406 transreid INFO: best so far: clipreid_baseline mAP 88.6% R1 95.4% @epoch 58 | holistic mAP 88.7% R1 95.5% @epoch 54 | part_lse mAP 84.4% R1 92.2% @epoch 54
+2026-09-21 15:43:11,150 transreid INFO: Epoch[59] Iteration[50/185] Loss: 5.240 (id 2.151 tri 0.024 i2t 1.081 | part_id 1.068 part_tri 0.005 part_i2t 1.266 pix 0.794) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:43:16,321 transreid INFO: Epoch[59] Iteration[100/185] Loss: 5.222 (id 2.147 tri 0.021 i2t 1.078 | part_id 1.066 part_tri 0.005 part_i2t 1.255 pix 0.792) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:43:21,481 transreid INFO: Epoch[59] Iteration[150/185] Loss: 5.202 (id 2.139 tri 0.020 i2t 1.075 | part_id 1.063 part_tri 0.005 part_i2t 1.244 pix 0.794) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:43:24,515 transreid INFO: Epoch 59 done. Loss: 5.182 Time per batch: 0.104[s] Speed: 612.9[samples/s]
+2026-09-21 15:43:30,245 transreid INFO: Epoch[60] Iteration[50/185] Loss: 5.242 (id 2.150 tri 0.025 i2t 1.082 | part_id 1.068 part_tri 0.007 part_i2t 1.264 pix 0.792) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:43:35,424 transreid INFO: Epoch[60] Iteration[100/185] Loss: 5.217 (id 2.142 tri 0.022 i2t 1.078 | part_id 1.064 part_tri 0.006 part_i2t 1.253 pix 0.793) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:43:40,690 transreid INFO: Epoch[60] Iteration[150/185] Loss: 5.195 (id 2.135 tri 0.021 i2t 1.074 | part_id 1.061 part_tri 0.005 part_i2t 1.242 pix 0.793) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:43:43,738 transreid INFO: Epoch 60 done. Loss: 5.177 Time per batch: 0.104[s] Speed: 612.6[samples/s]
+2026-09-21 15:43:44,016 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage2/RN50_part_stage2_60.pth
+2026-09-21 15:43:54,573 transreid INFO: Validation Results - Epoch: 60
+2026-09-21 15:43:54,574 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.1889999955892563, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.003000000026077032, 'feet': 0.2809999883174896} | gallery: {'global': 0.0, 'head': 0.3190000057220459, 'upper_arms_torso': 0.041999999433755875, 'lower_arms_torso': 0.06499999761581421, 'legs': 0.041999999433755875, 'feet': 0.3540000021457672}
+2026-09-21 15:43:54,638 transreid INFO: query-gallery pairs with >=1 unmatched part: 71.5% | with no shared part: 1.75% | mean unmatched parts: 1.14
+2026-09-21 15:43:57,420 transreid INFO: [clipreid_baseline] mAP: 88.8%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.2%
+2026-09-21 15:44:00,160 transreid INFO: [holistic         ] mAP: 88.7%  Rank-1: 95.6%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 15:44:02,875 transreid INFO: [part_lse         ] mAP: 84.3%  Rank-1: 92.0%  Rank-5: 98.0%  Rank-10: 98.8%
+2026-09-21 15:44:02,983 transreid INFO: best so far: clipreid_baseline mAP 88.8% R1 95.3% @epoch 60 | holistic mAP 88.7% R1 95.5% @epoch 54 | part_lse mAP 84.4% R1 92.2% @epoch 54
+2026-09-21 15:44:08,665 transreid INFO: Epoch[61] Iteration[50/185] Loss: 5.221 (id 2.148 tri 0.020 i2t 1.079 | part_id 1.066 part_tri 0.004 part_i2t 1.254 pix 0.792) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:44:13,832 transreid INFO: Epoch[61] Iteration[100/185] Loss: 5.211 (id 2.143 tri 0.021 i2t 1.077 | part_id 1.064 part_tri 0.004 part_i2t 1.249 pix 0.791) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:44:18,942 transreid INFO: Epoch[61] Iteration[150/185] Loss: 5.196 (id 2.137 tri 0.022 i2t 1.074 | part_id 1.061 part_tri 0.004 part_i2t 1.239 pix 0.791) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:44:21,913 transreid INFO: Epoch 61 done. Loss: 5.178 Time per batch: 0.103[s] Speed: 618.7[samples/s]
+2026-09-21 15:44:27,688 transreid INFO: Epoch[62] Iteration[50/185] Loss: 5.226 (id 2.148 tri 0.022 i2t 1.079 | part_id 1.067 part_tri 0.005 part_i2t 1.257 pix 0.791) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:44:32,891 transreid INFO: Epoch[62] Iteration[100/185] Loss: 5.195 (id 2.136 tri 0.019 i2t 1.074 | part_id 1.062 part_tri 0.004 part_i2t 1.246 pix 0.791) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:44:38,119 transreid INFO: Epoch[62] Iteration[150/185] Loss: 5.175 (id 2.129 tri 0.018 i2t 1.071 | part_id 1.059 part_tri 0.004 part_i2t 1.236 pix 0.790) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:44:41,204 transreid INFO: Epoch 62 done. Loss: 5.157 Time per batch: 0.105[s] Speed: 610.5[samples/s]
+2026-09-21 15:44:51,753 transreid INFO: Validation Results - Epoch: 62
+2026-09-21 15:44:51,763 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.164000004529953, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.004999999888241291, 'feet': 0.2709999978542328} | gallery: {'global': 0.0, 'head': 0.3050000071525574, 'upper_arms_torso': 0.03799999877810478, 'lower_arms_torso': 0.06599999964237213, 'legs': 0.041999999433755875, 'feet': 0.35199999809265137}
+2026-09-21 15:44:51,829 transreid INFO: query-gallery pairs with >=1 unmatched part: 69.6% | with no shared part: 1.61% | mean unmatched parts: 1.10
+2026-09-21 15:44:54,637 transreid INFO: [clipreid_baseline] mAP: 88.8%  Rank-1: 95.2%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 15:44:57,403 transreid INFO: [holistic         ] mAP: 88.8%  Rank-1: 95.2%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 15:45:00,132 transreid INFO: [part_lse         ] mAP: 84.4%  Rank-1: 92.0%  Rank-5: 97.7%  Rank-10: 98.9%
+2026-09-21 15:45:00,235 transreid INFO: best so far: clipreid_baseline mAP 88.8% R1 95.2% @epoch 62 | holistic mAP 88.8% R1 95.2% @epoch 62 | part_lse mAP 84.4% R1 92.0% @epoch 62
+2026-09-21 15:45:05,960 transreid INFO: Epoch[63] Iteration[50/185] Loss: 5.227 (id 2.150 tri 0.020 i2t 1.082 | part_id 1.067 part_tri 0.005 part_i2t 1.256 pix 0.790) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:45:11,081 transreid INFO: Epoch[63] Iteration[100/185] Loss: 5.200 (id 2.138 tri 0.021 i2t 1.076 | part_id 1.062 part_tri 0.004 part_i2t 1.245 pix 0.789) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:45:16,222 transreid INFO: Epoch[63] Iteration[150/185] Loss: 5.176 (id 2.130 tri 0.020 i2t 1.072 | part_id 1.058 part_tri 0.004 part_i2t 1.232 pix 0.787) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:45:19,292 transreid INFO: Epoch 63 done. Loss: 5.164 Time per batch: 0.104[s] Speed: 614.6[samples/s]
+2026-09-21 15:45:25,084 transreid INFO: Epoch[64] Iteration[50/185] Loss: 5.218 (id 2.142 tri 0.025 i2t 1.077 | part_id 1.064 part_tri 0.007 part_i2t 1.251 pix 0.789) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:45:30,311 transreid INFO: Epoch[64] Iteration[100/185] Loss: 5.197 (id 2.137 tri 0.023 i2t 1.075 | part_id 1.061 part_tri 0.006 part_i2t 1.241 pix 0.787) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:45:35,548 transreid INFO: Epoch[64] Iteration[150/185] Loss: 5.179 (id 2.131 tri 0.021 i2t 1.072 | part_id 1.058 part_tri 0.005 part_i2t 1.233 pix 0.787) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:45:38,532 transreid INFO: Epoch 64 done. Loss: 5.162 Time per batch: 0.105[s] Speed: 608.8[samples/s]
+2026-09-21 15:45:48,991 transreid INFO: Validation Results - Epoch: 64
+2026-09-21 15:45:48,994 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.16500000655651093, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.004000000189989805, 'feet': 0.23399999737739563} | gallery: {'global': 0.0, 'head': 0.29100000858306885, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.05900000035762787, 'legs': 0.04100000113248825, 'feet': 0.3160000145435333}
+2026-09-21 15:45:49,057 transreid INFO: query-gallery pairs with >=1 unmatched part: 65.7% | with no shared part: 1.73% | mean unmatched parts: 1.04
+2026-09-21 15:45:51,880 transreid INFO: [clipreid_baseline] mAP: 88.9%  Rank-1: 95.3%  Rank-5: 98.3%  Rank-10: 99.0%
+2026-09-21 15:45:54,625 transreid INFO: [holistic         ] mAP: 88.9%  Rank-1: 95.3%  Rank-5: 98.4%  Rank-10: 99.0%
+2026-09-21 15:45:57,391 transreid INFO: [part_lse         ] mAP: 84.8%  Rank-1: 92.3%  Rank-5: 97.9%  Rank-10: 98.9%
+2026-09-21 15:45:57,504 transreid INFO: best so far: clipreid_baseline mAP 88.9% R1 95.3% @epoch 64 | holistic mAP 88.9% R1 95.3% @epoch 64 | part_lse mAP 84.8% R1 92.3% @epoch 64
+2026-09-21 15:46:03,306 transreid INFO: Epoch[65] Iteration[50/185] Loss: 5.211 (id 2.147 tri 0.017 i2t 1.078 | part_id 1.066 part_tri 0.003 part_i2t 1.251 pix 0.785) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:46:08,586 transreid INFO: Epoch[65] Iteration[100/185] Loss: 5.193 (id 2.139 tri 0.018 i2t 1.074 | part_id 1.062 part_tri 0.004 part_i2t 1.242 pix 0.785) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:46:13,776 transreid INFO: Epoch[65] Iteration[150/185] Loss: 5.170 (id 2.130 tri 0.019 i2t 1.070 | part_id 1.058 part_tri 0.004 part_i2t 1.230 pix 0.785) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:46:16,916 transreid INFO: Epoch 65 done. Loss: 5.157 Time per batch: 0.106[s] Speed: 603.4[samples/s]
+2026-09-21 15:46:22,675 transreid INFO: Epoch[66] Iteration[50/185] Loss: 5.215 (id 2.144 tri 0.021 i2t 1.079 | part_id 1.066 part_tri 0.005 part_i2t 1.252 pix 0.784) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:46:27,973 transreid INFO: Epoch[66] Iteration[100/185] Loss: 5.197 (id 2.137 tri 0.022 i2t 1.076 | part_id 1.062 part_tri 0.005 part_i2t 1.240 pix 0.784) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:46:33,201 transreid INFO: Epoch[66] Iteration[150/185] Loss: 5.164 (id 2.127 tri 0.019 i2t 1.071 | part_id 1.057 part_tri 0.004 part_i2t 1.226 pix 0.783) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:46:36,280 transreid INFO: Epoch 66 done. Loss: 5.147 Time per batch: 0.105[s] Speed: 608.2[samples/s]
+2026-09-21 15:46:46,688 transreid INFO: Validation Results - Epoch: 66
+2026-09-21 15:46:46,689 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14499999582767487, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.003000000026077032, 'feet': 0.28999999165534973} | gallery: {'global': 0.0, 'head': 0.2849999964237213, 'upper_arms_torso': 0.03999999910593033, 'lower_arms_torso': 0.06400000303983688, 'legs': 0.0430000014603138, 'feet': 0.37400001287460327}
+2026-09-21 15:46:46,752 transreid INFO: query-gallery pairs with >=1 unmatched part: 70.1% | with no shared part: 1.64% | mean unmatched parts: 1.10
+2026-09-21 15:46:49,616 transreid INFO: [clipreid_baseline] mAP: 88.5%  Rank-1: 94.9%  Rank-5: 98.6%  Rank-10: 99.0%
+2026-09-21 15:46:52,348 transreid INFO: [holistic         ] mAP: 88.5%  Rank-1: 95.5%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 15:46:55,063 transreid INFO: [part_lse         ] mAP: 83.8%  Rank-1: 91.8%  Rank-5: 98.0%  Rank-10: 98.7%
+2026-09-21 15:46:55,177 transreid INFO: best so far: clipreid_baseline mAP 88.9% R1 95.3% @epoch 64 | holistic mAP 88.9% R1 95.3% @epoch 64 | part_lse mAP 84.8% R1 92.3% @epoch 64
+2026-09-21 15:47:00,952 transreid INFO: Epoch[67] Iteration[50/185] Loss: 5.199 (id 2.141 tri 0.020 i2t 1.076 | part_id 1.063 part_tri 0.004 part_i2t 1.242 pix 0.783) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:47:06,223 transreid INFO: Epoch[67] Iteration[100/185] Loss: 5.174 (id 2.132 tri 0.018 i2t 1.072 | part_id 1.058 part_tri 0.004 part_i2t 1.233 pix 0.781) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:47:11,431 transreid INFO: Epoch[67] Iteration[150/185] Loss: 5.150 (id 2.124 tri 0.016 i2t 1.069 | part_id 1.055 part_tri 0.003 part_i2t 1.221 pix 0.781) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:47:14,507 transreid INFO: Epoch 67 done. Loss: 5.137 Time per batch: 0.105[s] Speed: 609.2[samples/s]
+2026-09-21 15:47:20,339 transreid INFO: Epoch[68] Iteration[50/185] Loss: 5.212 (id 2.149 tri 0.021 i2t 1.077 | part_id 1.066 part_tri 0.004 part_i2t 1.243 pix 0.782) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:47:25,567 transreid INFO: Epoch[68] Iteration[100/185] Loss: 5.190 (id 2.138 tri 0.022 i2t 1.073 | part_id 1.061 part_tri 0.004 part_i2t 1.233 pix 0.782) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:47:30,787 transreid INFO: Epoch[68] Iteration[150/185] Loss: 5.166 (id 2.130 tri 0.021 i2t 1.070 | part_id 1.057 part_tri 0.004 part_i2t 1.222 pix 0.782) Acc: 1.000, Base Lr: 3.50e-05
+2026-09-21 15:47:33,783 transreid INFO: Epoch 68 done. Loss: 5.152 Time per batch: 0.105[s] Speed: 607.6[samples/s]
+2026-09-21 15:47:44,276 transreid INFO: Validation Results - Epoch: 68
+2026-09-21 15:47:44,277 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.15800000727176666, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.004000000189989805, 'legs': 0.007000000216066837, 'feet': 0.2680000066757202} | gallery: {'global': 0.0, 'head': 0.28299999237060547, 'upper_arms_torso': 0.04699999839067459, 'lower_arms_torso': 0.06700000166893005, 'legs': 0.04800000041723251, 'feet': 0.3540000021457672}
+2026-09-21 15:47:44,340 transreid INFO: query-gallery pairs with >=1 unmatched part: 68.4% | with no shared part: 1.88% | mean unmatched parts: 1.09
+2026-09-21 15:47:47,176 transreid INFO: [clipreid_baseline] mAP: 88.7%  Rank-1: 95.2%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:47:49,932 transreid INFO: [holistic         ] mAP: 88.5%  Rank-1: 95.2%  Rank-5: 98.3%  Rank-10: 99.1%
+2026-09-21 15:47:52,696 transreid INFO: [part_lse         ] mAP: 83.7%  Rank-1: 91.5%  Rank-5: 97.7%  Rank-10: 98.6%
+2026-09-21 15:47:52,808 transreid INFO: best so far: clipreid_baseline mAP 88.9% R1 95.3% @epoch 64 | holistic mAP 88.9% R1 95.3% @epoch 64 | part_lse mAP 84.8% R1 92.3% @epoch 64
+2026-09-21 15:47:58,650 transreid INFO: Epoch[69] Iteration[50/185] Loss: 5.199 (id 2.143 tri 0.017 i2t 1.077 | part_id 1.063 part_tri 0.004 part_i2t 1.244 pix 0.779) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:48:03,900 transreid INFO: Epoch[69] Iteration[100/185] Loss: 5.174 (id 2.134 tri 0.016 i2t 1.072 | part_id 1.059 part_tri 0.004 part_i2t 1.233 pix 0.779) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:48:09,128 transreid INFO: Epoch[69] Iteration[150/185] Loss: 5.156 (id 2.126 tri 0.017 i2t 1.070 | part_id 1.056 part_tri 0.004 part_i2t 1.223 pix 0.779) Acc: 0.999, Base Lr: 3.50e-05
+2026-09-21 15:48:12,129 transreid INFO: Epoch 69 done. Loss: 5.139 Time per batch: 0.106[s] Speed: 606.2[samples/s]
+2026-09-21 15:48:17,887 transreid INFO: Epoch[70] Iteration[50/185] Loss: 5.203 (id 2.144 tri 0.016 i2t 1.078 | part_id 1.064 part_tri 0.003 part_i2t 1.250 pix 0.776) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:48:23,101 transreid INFO: Epoch[70] Iteration[100/185] Loss: 5.165 (id 2.130 tri 0.018 i2t 1.071 | part_id 1.058 part_tri 0.004 part_i2t 1.228 pix 0.776) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:48:28,329 transreid INFO: Epoch[70] Iteration[150/185] Loss: 5.137 (id 2.120 tri 0.016 i2t 1.066 | part_id 1.053 part_tri 0.004 part_i2t 1.215 pix 0.774) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:48:31,386 transreid INFO: Epoch 70 done. Loss: 5.121 Time per batch: 0.105[s] Speed: 611.5[samples/s]
+2026-09-21 15:48:41,772 transreid INFO: Validation Results - Epoch: 70
+2026-09-21 15:48:41,772 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.1599999964237213, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.004000000189989805, 'feet': 0.23800000548362732} | gallery: {'global': 0.0, 'head': 0.2849999964237213, 'upper_arms_torso': 0.0430000014603138, 'lower_arms_torso': 0.06499999761581421, 'legs': 0.05000000074505806, 'feet': 0.32600000500679016}
+2026-09-21 15:48:41,835 transreid INFO: query-gallery pairs with >=1 unmatched part: 66.2% | with no shared part: 1.76% | mean unmatched parts: 1.05
+2026-09-21 15:48:44,640 transreid INFO: [clipreid_baseline] mAP: 89.0%  Rank-1: 95.2%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 15:48:47,447 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.4%  Rank-5: 98.4%  Rank-10: 99.2%
+2026-09-21 15:48:50,247 transreid INFO: [part_lse         ] mAP: 84.9%  Rank-1: 92.5%  Rank-5: 97.9%  Rank-10: 98.9%
+2026-09-21 15:48:50,361 transreid INFO: best so far: clipreid_baseline mAP 89.0% R1 95.2% @epoch 70 | holistic mAP 89.1% R1 95.4% @epoch 70 | part_lse mAP 84.9% R1 92.5% @epoch 70
+2026-09-21 15:48:56,185 transreid INFO: Epoch[71] Iteration[50/185] Loss: 5.170 (id 2.132 tri 0.021 i2t 1.068 | part_id 1.059 part_tri 0.005 part_i2t 1.228 pix 0.776) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:49:01,507 transreid INFO: Epoch[71] Iteration[100/185] Loss: 5.144 (id 2.123 tri 0.019 i2t 1.064 | part_id 1.054 part_tri 0.005 part_i2t 1.217 pix 0.775) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:49:06,731 transreid INFO: Epoch[71] Iteration[150/185] Loss: 5.126 (id 2.116 tri 0.020 i2t 1.062 | part_id 1.051 part_tri 0.004 part_i2t 1.207 pix 0.774) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:49:09,745 transreid INFO: Epoch 71 done. Loss: 5.111 Time per batch: 0.106[s] Speed: 604.2[samples/s]
+2026-09-21 15:49:15,675 transreid INFO: Epoch[72] Iteration[50/185] Loss: 5.169 (id 2.132 tri 0.022 i2t 1.068 | part_id 1.058 part_tri 0.005 part_i2t 1.224 pix 0.775) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:49:20,969 transreid INFO: Epoch[72] Iteration[100/185] Loss: 5.129 (id 2.118 tri 0.018 i2t 1.062 | part_id 1.051 part_tri 0.004 part_i2t 1.209 pix 0.775) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:49:26,258 transreid INFO: Epoch[72] Iteration[150/185] Loss: 5.111 (id 2.110 tri 0.019 i2t 1.059 | part_id 1.048 part_tri 0.004 part_i2t 1.201 pix 0.774) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:49:29,389 transreid INFO: Epoch 72 done. Loss: 5.097 Time per batch: 0.107[s] Speed: 599.5[samples/s]
+2026-09-21 15:49:40,110 transreid INFO: Validation Results - Epoch: 72
+2026-09-21 15:49:40,110 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.15800000727176666, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.006000000052154064, 'feet': 0.24799999594688416} | gallery: {'global': 0.0, 'head': 0.2840000092983246, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.06700000166893005, 'legs': 0.05000000074505806, 'feet': 0.3400000035762787}
+2026-09-21 15:49:40,174 transreid INFO: query-gallery pairs with >=1 unmatched part: 67.2% | with no shared part: 1.88% | mean unmatched parts: 1.07
+2026-09-21 15:49:43,050 transreid INFO: [clipreid_baseline] mAP: 89.0%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:49:45,874 transreid INFO: [holistic         ] mAP: 89.0%  Rank-1: 95.4%  Rank-5: 98.3%  Rank-10: 99.1%
+2026-09-21 15:49:48,705 transreid INFO: [part_lse         ] mAP: 84.7%  Rank-1: 92.5%  Rank-5: 97.9%  Rank-10: 98.9%
+2026-09-21 15:49:48,813 transreid INFO: best so far: clipreid_baseline mAP 89.0% R1 95.2% @epoch 70 | holistic mAP 89.1% R1 95.4% @epoch 70 | part_lse mAP 84.9% R1 92.5% @epoch 70
+2026-09-21 15:49:54,786 transreid INFO: Epoch[73] Iteration[50/185] Loss: 5.139 (id 2.125 tri 0.015 i2t 1.064 | part_id 1.054 part_tri 0.003 part_i2t 1.214 pix 0.772) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:50:00,144 transreid INFO: Epoch[73] Iteration[100/185] Loss: 5.123 (id 2.117 tri 0.015 i2t 1.062 | part_id 1.051 part_tri 0.003 part_i2t 1.208 pix 0.772) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:50:05,529 transreid INFO: Epoch[73] Iteration[150/185] Loss: 5.106 (id 2.110 tri 0.015 i2t 1.059 | part_id 1.048 part_tri 0.003 part_i2t 1.200 pix 0.773) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:50:08,926 transreid INFO: Epoch 73 done. Loss: 5.092 Time per batch: 0.109[s] Speed: 585.5[samples/s]
+2026-09-21 15:50:15,002 transreid INFO: Epoch[74] Iteration[50/185] Loss: 5.133 (id 2.119 tri 0.016 i2t 1.063 | part_id 1.052 part_tri 0.002 part_i2t 1.218 pix 0.774) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:50:20,277 transreid INFO: Epoch[74] Iteration[100/185] Loss: 5.118 (id 2.114 tri 0.017 i2t 1.061 | part_id 1.050 part_tri 0.003 part_i2t 1.208 pix 0.771) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:50:25,639 transreid INFO: Epoch[74] Iteration[150/185] Loss: 5.099 (id 2.107 tri 0.015 i2t 1.058 | part_id 1.046 part_tri 0.003 part_i2t 1.200 pix 0.771) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:50:28,750 transreid INFO: Epoch 74 done. Loss: 5.085 Time per batch: 0.108[s] Speed: 594.1[samples/s]
+2026-09-21 15:50:39,459 transreid INFO: Validation Results - Epoch: 74
+2026-09-21 15:50:39,465 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.15800000727176666, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.004999999888241291, 'feet': 0.2240000069141388} | gallery: {'global': 0.0, 'head': 0.28600001335144043, 'upper_arms_torso': 0.04399999976158142, 'lower_arms_torso': 0.06199999898672104, 'legs': 0.04500000178813934, 'feet': 0.31700000166893005}
+2026-09-21 15:50:39,538 transreid INFO: query-gallery pairs with >=1 unmatched part: 65.1% | with no shared part: 1.80% | mean unmatched parts: 1.03
+2026-09-21 15:50:42,362 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:50:45,145 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.3%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 15:50:47,931 transreid INFO: [part_lse         ] mAP: 85.0%  Rank-1: 92.5%  Rank-5: 98.1%  Rank-10: 98.9%
+2026-09-21 15:50:48,060 transreid INFO: best so far: clipreid_baseline mAP 89.1% R1 95.3% @epoch 74 | holistic mAP 89.1% R1 95.3% @epoch 74 | part_lse mAP 85.0% R1 92.5% @epoch 74
+2026-09-21 15:50:54,024 transreid INFO: Epoch[75] Iteration[50/185] Loss: 5.128 (id 2.118 tri 0.015 i2t 1.062 | part_id 1.051 part_tri 0.004 part_i2t 1.214 pix 0.774) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:50:59,333 transreid INFO: Epoch[75] Iteration[100/185] Loss: 5.125 (id 2.116 tri 0.019 i2t 1.061 | part_id 1.050 part_tri 0.004 part_i2t 1.208 pix 0.772) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:51:04,674 transreid INFO: Epoch[75] Iteration[150/185] Loss: 5.106 (id 2.109 tri 0.017 i2t 1.058 | part_id 1.047 part_tri 0.004 part_i2t 1.200 pix 0.771) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:51:07,649 transreid INFO: Epoch 75 done. Loss: 5.093 Time per batch: 0.107[s] Speed: 597.9[samples/s]
+2026-09-21 15:51:13,614 transreid INFO: Epoch[76] Iteration[50/185] Loss: 5.149 (id 2.127 tri 0.017 i2t 1.065 | part_id 1.056 part_tri 0.003 part_i2t 1.220 pix 0.773) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:51:18,918 transreid INFO: Epoch[76] Iteration[100/185] Loss: 5.124 (id 2.118 tri 0.015 i2t 1.061 | part_id 1.051 part_tri 0.003 part_i2t 1.210 pix 0.772) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:51:24,194 transreid INFO: Epoch[76] Iteration[150/185] Loss: 5.097 (id 2.108 tri 0.014 i2t 1.057 | part_id 1.047 part_tri 0.002 part_i2t 1.199 pix 0.771) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:51:27,346 transreid INFO: Epoch 76 done. Loss: 5.082 Time per batch: 0.107[s] Speed: 597.9[samples/s]
+2026-09-21 15:51:38,184 transreid INFO: Validation Results - Epoch: 76
+2026-09-21 15:51:38,184 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.15000000596046448, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.004000000189989805, 'feet': 0.23600000143051147} | gallery: {'global': 0.0, 'head': 0.27900001406669617, 'upper_arms_torso': 0.04100000113248825, 'lower_arms_torso': 0.061000000685453415, 'legs': 0.04500000178813934, 'feet': 0.3230000138282776}
+2026-09-21 15:51:38,250 transreid INFO: query-gallery pairs with >=1 unmatched part: 65.2% | with no shared part: 1.74% | mean unmatched parts: 1.02
+2026-09-21 15:51:41,182 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.5%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:51:43,996 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.4%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 15:51:46,817 transreid INFO: [part_lse         ] mAP: 85.0%  Rank-1: 92.5%  Rank-5: 98.0%  Rank-10: 98.9%
+2026-09-21 15:51:46,942 transreid INFO: best so far: clipreid_baseline mAP 89.1% R1 95.5% @epoch 76 | holistic mAP 89.1% R1 95.4% @epoch 76 | part_lse mAP 85.0% R1 92.5% @epoch 76
+2026-09-21 15:51:52,766 transreid INFO: Epoch[77] Iteration[50/185] Loss: 5.133 (id 2.121 tri 0.016 i2t 1.062 | part_id 1.053 part_tri 0.003 part_i2t 1.215 pix 0.769) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:51:57,973 transreid INFO: Epoch[77] Iteration[100/185] Loss: 5.120 (id 2.116 tri 0.016 i2t 1.060 | part_id 1.051 part_tri 0.003 part_i2t 1.208 pix 0.771) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:52:03,246 transreid INFO: Epoch[77] Iteration[150/185] Loss: 5.098 (id 2.108 tri 0.016 i2t 1.057 | part_id 1.047 part_tri 0.003 part_i2t 1.198 pix 0.770) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:52:06,442 transreid INFO: Epoch 77 done. Loss: 5.084 Time per batch: 0.106[s] Speed: 603.9[samples/s]
+2026-09-21 15:52:12,318 transreid INFO: Epoch[78] Iteration[50/185] Loss: 5.142 (id 2.125 tri 0.017 i2t 1.064 | part_id 1.055 part_tri 0.004 part_i2t 1.215 pix 0.771) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:52:17,681 transreid INFO: Epoch[78] Iteration[100/185] Loss: 5.114 (id 2.113 tri 0.016 i2t 1.060 | part_id 1.050 part_tri 0.003 part_i2t 1.205 pix 0.771) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:52:23,134 transreid INFO: Epoch[78] Iteration[150/185] Loss: 5.096 (id 2.107 tri 0.015 i2t 1.057 | part_id 1.046 part_tri 0.003 part_i2t 1.197 pix 0.770) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:52:26,197 transreid INFO: Epoch 78 done. Loss: 5.084 Time per batch: 0.108[s] Speed: 592.9[samples/s]
+2026-09-21 15:52:37,172 transreid INFO: Validation Results - Epoch: 78
+2026-09-21 15:52:37,172 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.15600000321865082, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.004999999888241291, 'feet': 0.23600000143051147} | gallery: {'global': 0.0, 'head': 0.2840000092983246, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.06599999964237213, 'legs': 0.04600000008940697, 'feet': 0.33000001311302185}
+2026-09-21 15:52:37,234 transreid INFO: query-gallery pairs with >=1 unmatched part: 65.9% | with no shared part: 1.84% | mean unmatched parts: 1.05
+2026-09-21 15:52:40,149 transreid INFO: [clipreid_baseline] mAP: 89.0%  Rank-1: 95.5%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:52:42,973 transreid INFO: [holistic         ] mAP: 89.0%  Rank-1: 95.5%  Rank-5: 98.4%  Rank-10: 99.2%
+2026-09-21 15:52:45,784 transreid INFO: [part_lse         ] mAP: 84.7%  Rank-1: 92.4%  Rank-5: 98.0%  Rank-10: 98.8%
+2026-09-21 15:52:45,924 transreid INFO: best so far: clipreid_baseline mAP 89.1% R1 95.5% @epoch 76 | holistic mAP 89.1% R1 95.4% @epoch 76 | part_lse mAP 85.0% R1 92.5% @epoch 76
+2026-09-21 15:52:52,012 transreid INFO: Epoch[79] Iteration[50/185] Loss: 5.134 (id 2.122 tri 0.019 i2t 1.061 | part_id 1.054 part_tri 0.003 part_i2t 1.211 pix 0.772) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:52:57,407 transreid INFO: Epoch[79] Iteration[100/185] Loss: 5.111 (id 2.113 tri 0.017 i2t 1.058 | part_id 1.049 part_tri 0.003 part_i2t 1.203 pix 0.770) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:53:02,777 transreid INFO: Epoch[79] Iteration[150/185] Loss: 5.090 (id 2.105 tri 0.015 i2t 1.056 | part_id 1.045 part_tri 0.003 part_i2t 1.194 pix 0.769) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:53:06,829 transreid INFO: Epoch 79 done. Loss: 5.079 Time per batch: 0.114[s] Speed: 560.3[samples/s]
+2026-09-21 15:53:13,066 transreid INFO: Epoch[80] Iteration[50/185] Loss: 5.121 (id 2.117 tri 0.013 i2t 1.061 | part_id 1.052 part_tri 0.003 part_i2t 1.211 pix 0.768) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:53:18,535 transreid INFO: Epoch[80] Iteration[100/185] Loss: 5.098 (id 2.108 tri 0.014 i2t 1.057 | part_id 1.047 part_tri 0.003 part_i2t 1.200 pix 0.768) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:53:24,101 transreid INFO: Epoch[80] Iteration[150/185] Loss: 5.085 (id 2.103 tri 0.014 i2t 1.055 | part_id 1.044 part_tri 0.003 part_i2t 1.193 pix 0.768) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:53:27,742 transreid INFO: Epoch 80 done. Loss: 5.073 Time per batch: 0.114[s] Speed: 560.0[samples/s]
+2026-09-21 15:53:28,065 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage2/RN50_part_stage2_80.pth
+2026-09-21 15:53:44,268 transreid INFO: Validation Results - Epoch: 80
+2026-09-21 15:53:44,270 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14800000190734863, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0010000000474974513, 'legs': 0.004999999888241291, 'feet': 0.2199999988079071} | gallery: {'global': 0.0, 'head': 0.2809999883174896, 'upper_arms_torso': 0.041999999433755875, 'lower_arms_torso': 0.05999999865889549, 'legs': 0.04399999976158142, 'feet': 0.3160000145435333}
+2026-09-21 15:53:44,345 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.2% | with no shared part: 1.68% | mean unmatched parts: 1.01
+2026-09-21 15:53:47,656 transreid INFO: [clipreid_baseline] mAP: 89.0%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:53:50,599 transreid INFO: [holistic         ] mAP: 89.0%  Rank-1: 95.4%  Rank-5: 98.3%  Rank-10: 99.2%
+2026-09-21 15:53:53,532 transreid INFO: [part_lse         ] mAP: 84.9%  Rank-1: 92.0%  Rank-5: 98.1%  Rank-10: 99.0%
+2026-09-21 15:53:53,631 transreid INFO: best so far: clipreid_baseline mAP 89.1% R1 95.5% @epoch 76 | holistic mAP 89.1% R1 95.4% @epoch 76 | part_lse mAP 85.0% R1 92.5% @epoch 76
+2026-09-21 15:53:59,747 transreid INFO: Epoch[81] Iteration[50/185] Loss: 5.107 (id 2.112 tri 0.013 i2t 1.058 | part_id 1.049 part_tri 0.003 part_i2t 1.206 pix 0.768) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:54:04,984 transreid INFO: Epoch[81] Iteration[100/185] Loss: 5.093 (id 2.107 tri 0.012 i2t 1.057 | part_id 1.046 part_tri 0.002 part_i2t 1.200 pix 0.769) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:54:10,365 transreid INFO: Epoch[81] Iteration[150/185] Loss: 5.085 (id 2.104 tri 0.013 i2t 1.055 | part_id 1.045 part_tri 0.002 part_i2t 1.194 pix 0.769) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:54:13,501 transreid INFO: Epoch 81 done. Loss: 5.075 Time per batch: 0.109[s] Speed: 589.5[samples/s]
+2026-09-21 15:54:19,787 transreid INFO: Epoch[82] Iteration[50/185] Loss: 5.117 (id 2.115 tri 0.017 i2t 1.059 | part_id 1.051 part_tri 0.003 part_i2t 1.207 pix 0.768) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:54:24,996 transreid INFO: Epoch[82] Iteration[100/185] Loss: 5.099 (id 2.108 tri 0.015 i2t 1.057 | part_id 1.047 part_tri 0.003 part_i2t 1.200 pix 0.769) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:54:30,291 transreid INFO: Epoch[82] Iteration[150/185] Loss: 5.083 (id 2.103 tri 0.014 i2t 1.055 | part_id 1.044 part_tri 0.003 part_i2t 1.192 pix 0.768) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:54:33,557 transreid INFO: Epoch 82 done. Loss: 5.072 Time per batch: 0.110[s] Speed: 584.0[samples/s]
+2026-09-21 15:54:46,392 transreid INFO: Validation Results - Epoch: 82
+2026-09-21 15:54:46,393 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14399999380111694, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.006000000052154064, 'feet': 0.23000000417232513} | gallery: {'global': 0.0, 'head': 0.27300000190734863, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.06400000303983688, 'legs': 0.04899999871850014, 'feet': 0.3230000138282776}
+2026-09-21 15:54:46,467 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.3% | with no shared part: 1.82% | mean unmatched parts: 1.02
+2026-09-21 15:54:49,479 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.2%  Rank-5: 98.6%  Rank-10: 99.0%
+2026-09-21 15:54:52,416 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.2%  Rank-5: 98.4%  Rank-10: 99.2%
+2026-09-21 15:54:55,321 transreid INFO: [part_lse         ] mAP: 84.8%  Rank-1: 92.3%  Rank-5: 98.0%  Rank-10: 98.9%
+2026-09-21 15:54:55,424 transreid INFO: best so far: clipreid_baseline mAP 89.2% R1 95.2% @epoch 82 | holistic mAP 89.1% R1 95.4% @epoch 76 | part_lse mAP 85.0% R1 92.5% @epoch 76
+2026-09-21 15:55:01,507 transreid INFO: Epoch[83] Iteration[50/185] Loss: 5.129 (id 2.119 tri 0.020 i2t 1.061 | part_id 1.052 part_tri 0.004 part_i2t 1.208 pix 0.769) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:55:06,732 transreid INFO: Epoch[83] Iteration[100/185] Loss: 5.109 (id 2.112 tri 0.017 i2t 1.058 | part_id 1.049 part_tri 0.003 part_i2t 1.201 pix 0.769) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:55:11,958 transreid INFO: Epoch[83] Iteration[150/185] Loss: 5.088 (id 2.104 tri 0.015 i2t 1.055 | part_id 1.045 part_tri 0.003 part_i2t 1.193 pix 0.768) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:55:15,194 transreid INFO: Epoch 83 done. Loss: 5.077 Time per batch: 0.107[s] Speed: 595.7[samples/s]
+2026-09-21 15:55:21,150 transreid INFO: Epoch[84] Iteration[50/185] Loss: 5.122 (id 2.117 tri 0.014 i2t 1.061 | part_id 1.052 part_tri 0.004 part_i2t 1.210 pix 0.769) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:55:26,448 transreid INFO: Epoch[84] Iteration[100/185] Loss: 5.105 (id 2.111 tri 0.015 i2t 1.059 | part_id 1.048 part_tri 0.003 part_i2t 1.201 pix 0.767) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:55:31,635 transreid INFO: Epoch[84] Iteration[150/185] Loss: 5.090 (id 2.104 tri 0.016 i2t 1.056 | part_id 1.045 part_tri 0.003 part_i2t 1.193 pix 0.767) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:55:35,002 transreid INFO: Epoch 84 done. Loss: 5.077 Time per batch: 0.108[s] Speed: 594.5[samples/s]
+2026-09-21 15:55:47,635 transreid INFO: Validation Results - Epoch: 84
+2026-09-21 15:55:47,637 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14800000190734863, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.006000000052154064, 'feet': 0.2029999941587448} | gallery: {'global': 0.0, 'head': 0.27799999713897705, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.06499999761581421, 'legs': 0.04699999839067459, 'feet': 0.29899999499320984}
+2026-09-21 15:55:47,714 transreid INFO: query-gallery pairs with >=1 unmatched part: 62.5% | with no shared part: 1.77% | mean unmatched parts: 0.99
+2026-09-21 15:55:50,726 transreid INFO: [clipreid_baseline] mAP: 89.3%  Rank-1: 95.4%  Rank-5: 98.6%  Rank-10: 99.0%
+2026-09-21 15:55:53,674 transreid INFO: [holistic         ] mAP: 89.2%  Rank-1: 95.3%  Rank-5: 98.3%  Rank-10: 99.2%
+2026-09-21 15:55:56,597 transreid INFO: [part_lse         ] mAP: 85.1%  Rank-1: 92.2%  Rank-5: 98.1%  Rank-10: 98.8%
+2026-09-21 15:55:56,704 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.2% @epoch 84
+2026-09-21 15:56:02,810 transreid INFO: Epoch[85] Iteration[50/185] Loss: 5.110 (id 2.113 tri 0.013 i2t 1.059 | part_id 1.050 part_tri 0.003 part_i2t 1.207 pix 0.767) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:56:08,123 transreid INFO: Epoch[85] Iteration[100/185] Loss: 5.103 (id 2.111 tri 0.015 i2t 1.057 | part_id 1.048 part_tri 0.003 part_i2t 1.200 pix 0.767) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:56:13,511 transreid INFO: Epoch[85] Iteration[150/185] Loss: 5.084 (id 2.104 tri 0.013 i2t 1.054 | part_id 1.045 part_tri 0.003 part_i2t 1.192 pix 0.767) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:56:16,921 transreid INFO: Epoch 85 done. Loss: 5.071 Time per batch: 0.110[s] Speed: 582.5[samples/s]
+2026-09-21 15:56:23,141 transreid INFO: Epoch[86] Iteration[50/185] Loss: 5.117 (id 2.116 tri 0.015 i2t 1.059 | part_id 1.051 part_tri 0.003 part_i2t 1.208 pix 0.767) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:56:28,608 transreid INFO: Epoch[86] Iteration[100/185] Loss: 5.093 (id 2.107 tri 0.013 i2t 1.056 | part_id 1.047 part_tri 0.003 part_i2t 1.199 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:56:34,070 transreid INFO: Epoch[86] Iteration[150/185] Loss: 5.079 (id 2.100 tri 0.014 i2t 1.054 | part_id 1.043 part_tri 0.003 part_i2t 1.192 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:56:37,459 transreid INFO: Epoch 86 done. Loss: 5.068 Time per batch: 0.112[s] Speed: 570.3[samples/s]
+2026-09-21 15:56:50,461 transreid INFO: Validation Results - Epoch: 86
+2026-09-21 15:56:50,468 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14300000667572021, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.007000000216066837, 'feet': 0.22300000488758087} | gallery: {'global': 0.0, 'head': 0.2759999930858612, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.06400000303983688, 'legs': 0.04899999871850014, 'feet': 0.3199999928474426}
+2026-09-21 15:56:50,547 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.0% | with no shared part: 1.84% | mean unmatched parts: 1.02
+2026-09-21 15:56:53,719 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:56:56,833 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.4%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 15:56:59,969 transreid INFO: [part_lse         ] mAP: 84.9%  Rank-1: 92.4%  Rank-5: 97.8%  Rank-10: 98.9%
+2026-09-21 15:57:00,085 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.2% @epoch 84
+2026-09-21 15:57:06,616 transreid INFO: Epoch[87] Iteration[50/185] Loss: 5.118 (id 2.116 tri 0.016 i2t 1.060 | part_id 1.051 part_tri 0.003 part_i2t 1.206 pix 0.767) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:57:12,098 transreid INFO: Epoch[87] Iteration[100/185] Loss: 5.098 (id 2.109 tri 0.015 i2t 1.057 | part_id 1.047 part_tri 0.003 part_i2t 1.198 pix 0.768) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:57:17,703 transreid INFO: Epoch[87] Iteration[150/185] Loss: 5.085 (id 2.104 tri 0.015 i2t 1.054 | part_id 1.044 part_tri 0.003 part_i2t 1.191 pix 0.767) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:57:21,100 transreid INFO: Epoch 87 done. Loss: 5.069 Time per batch: 0.114[s] Speed: 560.4[samples/s]
+2026-09-21 15:57:27,276 transreid INFO: Epoch[88] Iteration[50/185] Loss: 5.120 (id 2.118 tri 0.016 i2t 1.060 | part_id 1.052 part_tri 0.003 part_i2t 1.206 pix 0.765) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:57:32,545 transreid INFO: Epoch[88] Iteration[100/185] Loss: 5.103 (id 2.112 tri 0.015 i2t 1.057 | part_id 1.049 part_tri 0.003 part_i2t 1.200 pix 0.765) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:57:37,905 transreid INFO: Epoch[88] Iteration[150/185] Loss: 5.090 (id 2.106 tri 0.015 i2t 1.056 | part_id 1.046 part_tri 0.003 part_i2t 1.192 pix 0.766) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:57:41,180 transreid INFO: Epoch 88 done. Loss: 5.076 Time per batch: 0.110[s] Speed: 583.3[samples/s]
+2026-09-21 15:57:54,050 transreid INFO: Validation Results - Epoch: 88
+2026-09-21 15:57:54,058 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.1509999930858612, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.006000000052154064, 'feet': 0.22699999809265137} | gallery: {'global': 0.0, 'head': 0.2809999883174896, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.06800000369548798, 'legs': 0.052000001072883606, 'feet': 0.32199999690055847}
+2026-09-21 15:57:54,132 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.8% | with no shared part: 1.97% | mean unmatched parts: 1.04
+2026-09-21 15:57:57,102 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.4%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 15:58:00,011 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.3%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 15:58:02,908 transreid INFO: [part_lse         ] mAP: 84.8%  Rank-1: 92.2%  Rank-5: 97.9%  Rank-10: 99.0%
+2026-09-21 15:58:03,015 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.2% @epoch 84
+2026-09-21 15:58:09,045 transreid INFO: Epoch[89] Iteration[50/185] Loss: 5.114 (id 2.115 tri 0.017 i2t 1.059 | part_id 1.051 part_tri 0.003 part_i2t 1.204 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:58:14,369 transreid INFO: Epoch[89] Iteration[100/185] Loss: 5.098 (id 2.108 tri 0.016 i2t 1.056 | part_id 1.047 part_tri 0.003 part_i2t 1.198 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:58:19,675 transreid INFO: Epoch[89] Iteration[150/185] Loss: 5.086 (id 2.103 tri 0.017 i2t 1.055 | part_id 1.045 part_tri 0.003 part_i2t 1.191 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:58:22,918 transreid INFO: Epoch 89 done. Loss: 5.074 Time per batch: 0.109[s] Speed: 588.5[samples/s]
+2026-09-21 15:58:29,058 transreid INFO: Epoch[90] Iteration[50/185] Loss: 5.106 (id 2.113 tri 0.011 i2t 1.059 | part_id 1.050 part_tri 0.002 part_i2t 1.207 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:58:34,411 transreid INFO: Epoch[90] Iteration[100/185] Loss: 5.102 (id 2.111 tri 0.014 i2t 1.057 | part_id 1.048 part_tri 0.003 part_i2t 1.201 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:58:39,619 transreid INFO: Epoch[90] Iteration[150/185] Loss: 5.083 (id 2.104 tri 0.013 i2t 1.055 | part_id 1.045 part_tri 0.003 part_i2t 1.193 pix 0.765) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:58:42,928 transreid INFO: Epoch 90 done. Loss: 5.069 Time per batch: 0.109[s] Speed: 588.5[samples/s]
+2026-09-21 15:58:55,917 transreid INFO: Validation Results - Epoch: 90
+2026-09-21 15:58:55,927 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.1469999998807907, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.007000000216066837, 'feet': 0.2240000069141388} | gallery: {'global': 0.0, 'head': 0.2759999930858612, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.06599999964237213, 'legs': 0.050999999046325684, 'feet': 0.31700000166893005}
+2026-09-21 15:58:56,002 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.0% | with no shared part: 1.89% | mean unmatched parts: 1.02
+2026-09-21 15:58:59,002 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.4%  Rank-5: 98.6%  Rank-10: 99.0%
+2026-09-21 15:59:01,963 transreid INFO: [holistic         ] mAP: 89.0%  Rank-1: 95.4%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 15:59:04,881 transreid INFO: [part_lse         ] mAP: 84.8%  Rank-1: 92.2%  Rank-5: 97.9%  Rank-10: 98.8%
+2026-09-21 15:59:04,989 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.2% @epoch 84
+2026-09-21 15:59:11,152 transreid INFO: Epoch[91] Iteration[50/185] Loss: 5.114 (id 2.114 tri 0.017 i2t 1.058 | part_id 1.050 part_tri 0.003 part_i2t 1.207 pix 0.767) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:59:16,694 transreid INFO: Epoch[91] Iteration[100/185] Loss: 5.094 (id 2.107 tri 0.015 i2t 1.056 | part_id 1.046 part_tri 0.003 part_i2t 1.198 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:59:22,232 transreid INFO: Epoch[91] Iteration[150/185] Loss: 5.078 (id 2.102 tri 0.014 i2t 1.054 | part_id 1.043 part_tri 0.003 part_i2t 1.190 pix 0.765) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:59:25,353 transreid INFO: Epoch 91 done. Loss: 5.069 Time per batch: 0.112[s] Speed: 572.0[samples/s]
+2026-09-21 15:59:31,917 transreid INFO: Epoch[92] Iteration[50/185] Loss: 5.127 (id 2.120 tri 0.020 i2t 1.060 | part_id 1.053 part_tri 0.003 part_i2t 1.206 pix 0.767) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 15:59:37,783 transreid INFO: Epoch[92] Iteration[100/185] Loss: 5.099 (id 2.110 tri 0.016 i2t 1.057 | part_id 1.048 part_tri 0.003 part_i2t 1.196 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:59:43,676 transreid INFO: Epoch[92] Iteration[150/185] Loss: 5.079 (id 2.102 tri 0.014 i2t 1.054 | part_id 1.044 part_tri 0.003 part_i2t 1.189 pix 0.765) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 15:59:47,361 transreid INFO: Epoch 92 done. Loss: 5.066 Time per batch: 0.120[s] Speed: 532.2[samples/s]
+2026-09-21 16:00:02,544 transreid INFO: Validation Results - Epoch: 92
+2026-09-21 16:00:02,552 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14399999380111694, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.004999999888241291, 'feet': 0.210999995470047} | gallery: {'global': 0.0, 'head': 0.27399998903274536, 'upper_arms_torso': 0.041999999433755875, 'lower_arms_torso': 0.06400000303983688, 'legs': 0.04800000041723251, 'feet': 0.3070000112056732}
+2026-09-21 16:00:02,631 transreid INFO: query-gallery pairs with >=1 unmatched part: 62.8% | with no shared part: 1.77% | mean unmatched parts: 0.99
+2026-09-21 16:00:05,830 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:00:08,778 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.4%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 16:00:11,728 transreid INFO: [part_lse         ] mAP: 85.0%  Rank-1: 92.2%  Rank-5: 98.0%  Rank-10: 99.0%
+2026-09-21 16:00:11,838 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.2% @epoch 84
+2026-09-21 16:00:18,526 transreid INFO: Epoch[93] Iteration[50/185] Loss: 5.112 (id 2.115 tri 0.015 i2t 1.059 | part_id 1.050 part_tri 0.003 part_i2t 1.203 pix 0.764) Acc: 0.998, Base Lr: 3.50e-06
+2026-09-21 16:00:24,450 transreid INFO: Epoch[93] Iteration[100/185] Loss: 5.093 (id 2.108 tri 0.014 i2t 1.056 | part_id 1.047 part_tri 0.002 part_i2t 1.196 pix 0.765) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:00:30,163 transreid INFO: Epoch[93] Iteration[150/185] Loss: 5.077 (id 2.102 tri 0.012 i2t 1.054 | part_id 1.044 part_tri 0.002 part_i2t 1.189 pix 0.764) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:00:33,693 transreid INFO: Epoch 93 done. Loss: 5.065 Time per batch: 0.119[s] Speed: 535.9[samples/s]
+2026-09-21 16:00:40,613 transreid INFO: Epoch[94] Iteration[50/185] Loss: 5.117 (id 2.118 tri 0.017 i2t 1.058 | part_id 1.051 part_tri 0.004 part_i2t 1.203 pix 0.764) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:00:46,537 transreid INFO: Epoch[94] Iteration[100/185] Loss: 5.093 (id 2.107 tri 0.015 i2t 1.055 | part_id 1.047 part_tri 0.003 part_i2t 1.194 pix 0.764) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:00:52,312 transreid INFO: Epoch[94] Iteration[150/185] Loss: 5.080 (id 2.103 tri 0.015 i2t 1.054 | part_id 1.044 part_tri 0.003 part_i2t 1.188 pix 0.764) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:00:55,850 transreid INFO: Epoch 94 done. Loss: 5.065 Time per batch: 0.121[s] Speed: 528.6[samples/s]
+2026-09-21 16:01:09,177 transreid INFO: Validation Results - Epoch: 94
+2026-09-21 16:01:09,179 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14800000190734863, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.2160000056028366} | gallery: {'global': 0.0, 'head': 0.27799999713897705, 'upper_arms_torso': 0.04100000113248825, 'lower_arms_torso': 0.06300000101327896, 'legs': 0.04800000041723251, 'feet': 0.30799999833106995}
+2026-09-21 16:01:09,263 transreid INFO: query-gallery pairs with >=1 unmatched part: 63.3% | with no shared part: 1.73% | mean unmatched parts: 1.00
+2026-09-21 16:01:12,290 transreid INFO: [clipreid_baseline] mAP: 89.3%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:01:15,229 transreid INFO: [holistic         ] mAP: 89.2%  Rank-1: 95.4%  Rank-5: 98.5%  Rank-10: 99.2%
+2026-09-21 16:01:18,218 transreid INFO: [part_lse         ] mAP: 85.1%  Rank-1: 92.4%  Rank-5: 98.2%  Rank-10: 99.0%
+2026-09-21 16:01:18,328 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:01:24,748 transreid INFO: Epoch[95] Iteration[50/185] Loss: 5.109 (id 2.114 tri 0.015 i2t 1.058 | part_id 1.050 part_tri 0.002 part_i2t 1.203 pix 0.765) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:01:30,691 transreid INFO: Epoch[95] Iteration[100/185] Loss: 5.089 (id 2.106 tri 0.013 i2t 1.056 | part_id 1.046 part_tri 0.002 part_i2t 1.197 pix 0.764) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:01:36,293 transreid INFO: Epoch[95] Iteration[150/185] Loss: 5.072 (id 2.100 tri 0.012 i2t 1.053 | part_id 1.043 part_tri 0.002 part_i2t 1.188 pix 0.765) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:01:39,738 transreid INFO: Epoch 95 done. Loss: 5.059 Time per batch: 0.116[s] Speed: 550.0[samples/s]
+2026-09-21 16:01:46,041 transreid INFO: Epoch[96] Iteration[50/185] Loss: 5.135 (id 2.126 tri 0.020 i2t 1.061 | part_id 1.055 part_tri 0.004 part_i2t 1.205 pix 0.762) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:01:51,500 transreid INFO: Epoch[96] Iteration[100/185] Loss: 5.101 (id 2.111 tri 0.017 i2t 1.057 | part_id 1.048 part_tri 0.003 part_i2t 1.195 pix 0.764) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:01:56,952 transreid INFO: Epoch[96] Iteration[150/185] Loss: 5.076 (id 2.102 tri 0.014 i2t 1.053 | part_id 1.044 part_tri 0.003 part_i2t 1.187 pix 0.764) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:02:00,390 transreid INFO: Epoch 96 done. Loss: 5.062 Time per batch: 0.112[s] Speed: 570.2[samples/s]
+2026-09-21 16:02:13,141 transreid INFO: Validation Results - Epoch: 96
+2026-09-21 16:02:13,153 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.1469999998807907, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.006000000052154064, 'feet': 0.21799999475479126} | gallery: {'global': 0.0, 'head': 0.2750000059604645, 'upper_arms_torso': 0.04399999976158142, 'lower_arms_torso': 0.06300000101327896, 'legs': 0.04899999871850014, 'feet': 0.30799999833106995}
+2026-09-21 16:02:13,228 transreid INFO: query-gallery pairs with >=1 unmatched part: 63.2% | with no shared part: 1.80% | mean unmatched parts: 1.00
+2026-09-21 16:02:16,229 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.4%  Rank-5: 98.6%  Rank-10: 99.1%
+2026-09-21 16:02:19,201 transreid INFO: [holistic         ] mAP: 89.0%  Rank-1: 95.4%  Rank-5: 98.4%  Rank-10: 99.2%
+2026-09-21 16:02:22,115 transreid INFO: [part_lse         ] mAP: 84.6%  Rank-1: 91.9%  Rank-5: 97.9%  Rank-10: 99.0%
+2026-09-21 16:02:22,231 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:02:28,391 transreid INFO: Epoch[97] Iteration[50/185] Loss: 5.100 (id 2.110 tri 0.015 i2t 1.057 | part_id 1.049 part_tri 0.002 part_i2t 1.199 pix 0.763) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:02:33,753 transreid INFO: Epoch[97] Iteration[100/185] Loss: 5.087 (id 2.105 tri 0.015 i2t 1.055 | part_id 1.046 part_tri 0.002 part_i2t 1.193 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:02:39,129 transreid INFO: Epoch[97] Iteration[150/185] Loss: 5.070 (id 2.099 tri 0.014 i2t 1.053 | part_id 1.043 part_tri 0.002 part_i2t 1.186 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:02:42,260 transreid INFO: Epoch 97 done. Loss: 5.059 Time per batch: 0.110[s] Speed: 581.6[samples/s]
+2026-09-21 16:02:48,274 transreid INFO: Epoch[98] Iteration[50/185] Loss: 5.104 (id 2.112 tri 0.016 i2t 1.057 | part_id 1.050 part_tri 0.002 part_i2t 1.199 pix 0.766) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:02:54,061 transreid INFO: Epoch[98] Iteration[100/185] Loss: 5.089 (id 2.107 tri 0.014 i2t 1.055 | part_id 1.047 part_tri 0.002 part_i2t 1.193 pix 0.764) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:02:59,728 transreid INFO: Epoch[98] Iteration[150/185] Loss: 5.069 (id 2.099 tri 0.013 i2t 1.053 | part_id 1.043 part_tri 0.002 part_i2t 1.185 pix 0.763) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:03:03,041 transreid INFO: Epoch 98 done. Loss: 5.061 Time per batch: 0.114[s] Speed: 563.6[samples/s]
+2026-09-21 16:03:15,696 transreid INFO: Validation Results - Epoch: 98
+2026-09-21 16:03:15,707 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.15000000596046448, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.007000000216066837, 'feet': 0.2160000056028366} | gallery: {'global': 0.0, 'head': 0.2759999930858612, 'upper_arms_torso': 0.0430000014603138, 'lower_arms_torso': 0.05999999865889549, 'legs': 0.04699999839067459, 'feet': 0.30399999022483826}
+2026-09-21 16:03:15,783 transreid INFO: query-gallery pairs with >=1 unmatched part: 63.2% | with no shared part: 1.72% | mean unmatched parts: 1.00
+2026-09-21 16:03:18,774 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.3%  Rank-5: 98.6%  Rank-10: 99.0%
+2026-09-21 16:03:21,723 transreid INFO: [holistic         ] mAP: 89.2%  Rank-1: 95.4%  Rank-5: 98.4%  Rank-10: 99.2%
+2026-09-21 16:03:24,646 transreid INFO: [part_lse         ] mAP: 85.1%  Rank-1: 92.6%  Rank-5: 98.1%  Rank-10: 99.0%
+2026-09-21 16:03:24,756 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:03:30,916 transreid INFO: Epoch[99] Iteration[50/185] Loss: 5.119 (id 2.120 tri 0.016 i2t 1.058 | part_id 1.053 part_tri 0.003 part_i2t 1.205 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:03:36,222 transreid INFO: Epoch[99] Iteration[100/185] Loss: 5.105 (id 2.113 tri 0.016 i2t 1.057 | part_id 1.049 part_tri 0.003 part_i2t 1.199 pix 0.763) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:03:41,635 transreid INFO: Epoch[99] Iteration[150/185] Loss: 5.082 (id 2.104 tri 0.015 i2t 1.054 | part_id 1.045 part_tri 0.003 part_i2t 1.189 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:03:44,937 transreid INFO: Epoch 99 done. Loss: 5.068 Time per batch: 0.110[s] Speed: 580.4[samples/s]
+2026-09-21 16:03:52,080 transreid INFO: Epoch[100] Iteration[50/185] Loss: 5.111 (id 2.117 tri 0.013 i2t 1.058 | part_id 1.051 part_tri 0.003 part_i2t 1.202 pix 0.764) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:03:58,522 transreid INFO: Epoch[100] Iteration[100/185] Loss: 5.093 (id 2.109 tri 0.014 i2t 1.056 | part_id 1.047 part_tri 0.003 part_i2t 1.194 pix 0.763) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:04:04,246 transreid INFO: Epoch[100] Iteration[150/185] Loss: 5.070 (id 2.100 tri 0.012 i2t 1.052 | part_id 1.043 part_tri 0.003 part_i2t 1.185 pix 0.763) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:04:07,786 transreid INFO: Epoch 100 done. Loss: 5.057 Time per batch: 0.125[s] Speed: 512.6[samples/s]
+2026-09-21 16:04:08,109 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage2/RN50_part_stage2_100.pth
+2026-09-21 16:04:21,069 transreid INFO: Validation Results - Epoch: 100
+2026-09-21 16:04:21,077 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.15000000596046448, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.0020000000949949026, 'legs': 0.006000000052154064, 'feet': 0.2280000001192093} | gallery: {'global': 0.0, 'head': 0.27900001406669617, 'upper_arms_torso': 0.04699999839067459, 'lower_arms_torso': 0.06499999761581421, 'legs': 0.05000000074505806, 'feet': 0.3199999928474426}
+2026-09-21 16:04:21,157 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.7% | with no shared part: 1.97% | mean unmatched parts: 1.03
+2026-09-21 16:04:24,273 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.3%  Rank-5: 98.7%  Rank-10: 99.1%
+2026-09-21 16:04:27,209 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.3%  Rank-5: 98.4%  Rank-10: 99.2%
+2026-09-21 16:04:30,171 transreid INFO: [part_lse         ] mAP: 84.7%  Rank-1: 91.9%  Rank-5: 98.0%  Rank-10: 98.8%
+2026-09-21 16:04:30,285 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:04:36,363 transreid INFO: Epoch[101] Iteration[50/185] Loss: 5.100 (id 2.112 tri 0.011 i2t 1.058 | part_id 1.049 part_tri 0.002 part_i2t 1.202 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:04:41,765 transreid INFO: Epoch[101] Iteration[100/185] Loss: 5.083 (id 2.105 tri 0.012 i2t 1.055 | part_id 1.046 part_tri 0.002 part_i2t 1.193 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:04:47,099 transreid INFO: Epoch[101] Iteration[150/185] Loss: 5.066 (id 2.098 tri 0.011 i2t 1.053 | part_id 1.042 part_tri 0.002 part_i2t 1.186 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:04:50,421 transreid INFO: Epoch 101 done. Loss: 5.055 Time per batch: 0.110[s] Speed: 581.7[samples/s]
+2026-09-21 16:04:56,483 transreid INFO: Epoch[102] Iteration[50/185] Loss: 5.097 (id 2.111 tri 0.013 i2t 1.056 | part_id 1.048 part_tri 0.002 part_i2t 1.199 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:05:01,845 transreid INFO: Epoch[102] Iteration[100/185] Loss: 5.087 (id 2.105 tri 0.015 i2t 1.055 | part_id 1.046 part_tri 0.003 part_i2t 1.195 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:05:07,243 transreid INFO: Epoch[102] Iteration[150/185] Loss: 5.070 (id 2.099 tri 0.014 i2t 1.052 | part_id 1.042 part_tri 0.003 part_i2t 1.187 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:05:10,890 transreid INFO: Epoch 102 done. Loss: 5.058 Time per batch: 0.112[s] Speed: 572.2[samples/s]
+2026-09-21 16:05:23,380 transreid INFO: Validation Results - Epoch: 102
+2026-09-21 16:05:23,381 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.1509999930858612, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.006000000052154064, 'feet': 0.210999995470047} | gallery: {'global': 0.0, 'head': 0.2800000011920929, 'upper_arms_torso': 0.04699999839067459, 'lower_arms_torso': 0.06599999964237213, 'legs': 0.05000000074505806, 'feet': 0.3009999990463257}
+2026-09-21 16:05:23,457 transreid INFO: query-gallery pairs with >=1 unmatched part: 63.0% | with no shared part: 1.95% | mean unmatched parts: 1.01
+2026-09-21 16:05:26,539 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.4%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:05:29,485 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.5%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 16:05:32,468 transreid INFO: [part_lse         ] mAP: 84.6%  Rank-1: 91.7%  Rank-5: 97.8%  Rank-10: 98.9%
+2026-09-21 16:05:32,579 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:05:38,706 transreid INFO: Epoch[103] Iteration[50/185] Loss: 5.102 (id 2.114 tri 0.011 i2t 1.057 | part_id 1.050 part_tri 0.003 part_i2t 1.201 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:05:44,105 transreid INFO: Epoch[103] Iteration[100/185] Loss: 5.088 (id 2.108 tri 0.012 i2t 1.055 | part_id 1.047 part_tri 0.003 part_i2t 1.194 pix 0.761) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:05:49,468 transreid INFO: Epoch[103] Iteration[150/185] Loss: 5.068 (id 2.099 tri 0.012 i2t 1.052 | part_id 1.043 part_tri 0.003 part_i2t 1.185 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:05:52,760 transreid INFO: Epoch 103 done. Loss: 5.058 Time per batch: 0.110[s] Speed: 580.4[samples/s]
+2026-09-21 16:05:58,825 transreid INFO: Epoch[104] Iteration[50/185] Loss: 5.109 (id 2.116 tri 0.016 i2t 1.057 | part_id 1.050 part_tri 0.002 part_i2t 1.201 pix 0.765) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:06:04,305 transreid INFO: Epoch[104] Iteration[100/185] Loss: 5.089 (id 2.108 tri 0.014 i2t 1.055 | part_id 1.046 part_tri 0.002 part_i2t 1.193 pix 0.763) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:06:09,778 transreid INFO: Epoch[104] Iteration[150/185] Loss: 5.073 (id 2.101 tri 0.014 i2t 1.053 | part_id 1.043 part_tri 0.002 part_i2t 1.186 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:06:13,029 transreid INFO: Epoch 104 done. Loss: 5.061 Time per batch: 0.111[s] Speed: 577.9[samples/s]
+2026-09-21 16:06:25,515 transreid INFO: Validation Results - Epoch: 104
+2026-09-21 16:06:25,524 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14900000393390656, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.2329999953508377} | gallery: {'global': 0.0, 'head': 0.27799999713897705, 'upper_arms_torso': 0.04899999871850014, 'lower_arms_torso': 0.0689999982714653, 'legs': 0.05400000140070915, 'feet': 0.3190000057220459}
+2026-09-21 16:06:25,600 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.7% | with no shared part: 2.03% | mean unmatched parts: 1.05
+2026-09-21 16:06:28,613 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.4%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 16:06:31,572 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.4%  Rank-5: 98.3%  Rank-10: 99.2%
+2026-09-21 16:06:34,485 transreid INFO: [part_lse         ] mAP: 84.7%  Rank-1: 92.3%  Rank-5: 97.8%  Rank-10: 98.8%
+2026-09-21 16:06:34,595 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:06:40,697 transreid INFO: Epoch[105] Iteration[50/185] Loss: 5.109 (id 2.114 tri 0.017 i2t 1.057 | part_id 1.051 part_tri 0.004 part_i2t 1.198 pix 0.764) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:06:46,056 transreid INFO: Epoch[105] Iteration[100/185] Loss: 5.088 (id 2.107 tri 0.015 i2t 1.055 | part_id 1.047 part_tri 0.003 part_i2t 1.190 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:06:51,426 transreid INFO: Epoch[105] Iteration[150/185] Loss: 5.077 (id 2.102 tri 0.015 i2t 1.053 | part_id 1.044 part_tri 0.003 part_i2t 1.185 pix 0.761) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:06:54,767 transreid INFO: Epoch 105 done. Loss: 5.063 Time per batch: 0.110[s] Speed: 583.8[samples/s]
+2026-09-21 16:07:00,823 transreid INFO: Epoch[106] Iteration[50/185] Loss: 5.106 (id 2.116 tri 0.012 i2t 1.058 | part_id 1.051 part_tri 0.002 part_i2t 1.203 pix 0.762) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:07:06,248 transreid INFO: Epoch[106] Iteration[100/185] Loss: 5.087 (id 2.107 tri 0.013 i2t 1.055 | part_id 1.047 part_tri 0.003 part_i2t 1.192 pix 0.762) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:07:11,587 transreid INFO: Epoch[106] Iteration[150/185] Loss: 5.068 (id 2.099 tri 0.013 i2t 1.052 | part_id 1.043 part_tri 0.002 part_i2t 1.184 pix 0.762) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:07:14,847 transreid INFO: Epoch 106 done. Loss: 5.057 Time per batch: 0.110[s] Speed: 583.3[samples/s]
+2026-09-21 16:07:27,403 transreid INFO: Validation Results - Epoch: 106
+2026-09-21 16:07:27,404 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14800000190734863, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.006000000052154064, 'feet': 0.19900000095367432} | gallery: {'global': 0.0, 'head': 0.2759999930858612, 'upper_arms_torso': 0.04500000178813934, 'lower_arms_torso': 0.061000000685453415, 'legs': 0.04800000041723251, 'feet': 0.2919999957084656}
+2026-09-21 16:07:27,480 transreid INFO: query-gallery pairs with >=1 unmatched part: 61.9% | with no shared part: 1.78% | mean unmatched parts: 0.98
+2026-09-21 16:07:30,477 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.2%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:07:33,404 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.2%  Rank-5: 98.2%  Rank-10: 99.1%
+2026-09-21 16:07:36,342 transreid INFO: [part_lse         ] mAP: 84.9%  Rank-1: 92.3%  Rank-5: 97.9%  Rank-10: 98.8%
+2026-09-21 16:07:36,451 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:07:42,363 transreid INFO: Epoch[107] Iteration[50/185] Loss: 5.097 (id 2.113 tri 0.010 i2t 1.058 | part_id 1.049 part_tri 0.002 part_i2t 1.197 pix 0.758) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:07:47,659 transreid INFO: Epoch[107] Iteration[100/185] Loss: 5.083 (id 2.106 tri 0.011 i2t 1.055 | part_id 1.046 part_tri 0.002 part_i2t 1.191 pix 0.760) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:07:53,116 transreid INFO: Epoch[107] Iteration[150/185] Loss: 5.066 (id 2.099 tri 0.012 i2t 1.053 | part_id 1.042 part_tri 0.002 part_i2t 1.184 pix 0.760) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:07:56,411 transreid INFO: Epoch 107 done. Loss: 5.056 Time per batch: 0.109[s] Speed: 586.8[samples/s]
+2026-09-21 16:08:02,406 transreid INFO: Epoch[108] Iteration[50/185] Loss: 5.118 (id 2.119 tri 0.018 i2t 1.058 | part_id 1.053 part_tri 0.004 part_i2t 1.200 pix 0.763) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:08:07,788 transreid INFO: Epoch[108] Iteration[100/185] Loss: 5.092 (id 2.108 tri 0.016 i2t 1.055 | part_id 1.048 part_tri 0.004 part_i2t 1.192 pix 0.760) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:08:13,180 transreid INFO: Epoch[108] Iteration[150/185] Loss: 5.074 (id 2.101 tri 0.015 i2t 1.053 | part_id 1.044 part_tri 0.003 part_i2t 1.185 pix 0.759) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:08:16,439 transreid INFO: Epoch 108 done. Loss: 5.060 Time per batch: 0.109[s] Speed: 584.8[samples/s]
+2026-09-21 16:08:28,876 transreid INFO: Validation Results - Epoch: 108
+2026-09-21 16:08:28,887 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14000000059604645, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.22100000083446503} | gallery: {'global': 0.0, 'head': 0.2770000100135803, 'upper_arms_torso': 0.0430000014603138, 'lower_arms_torso': 0.06400000303983688, 'legs': 0.04899999871850014, 'feet': 0.3109999895095825}
+2026-09-21 16:08:28,965 transreid INFO: query-gallery pairs with >=1 unmatched part: 63.3% | with no shared part: 1.79% | mean unmatched parts: 1.01
+2026-09-21 16:08:31,964 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.2%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:08:34,935 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.3%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 16:08:38,168 transreid INFO: [part_lse         ] mAP: 84.8%  Rank-1: 92.0%  Rank-5: 97.8%  Rank-10: 99.0%
+2026-09-21 16:08:38,278 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:08:44,389 transreid INFO: Epoch[109] Iteration[50/185] Loss: 5.093 (id 2.111 tri 0.011 i2t 1.056 | part_id 1.049 part_tri 0.002 part_i2t 1.198 pix 0.761) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:08:49,586 transreid INFO: Epoch[109] Iteration[100/185] Loss: 5.075 (id 2.103 tri 0.010 i2t 1.054 | part_id 1.045 part_tri 0.002 part_i2t 1.191 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:08:54,807 transreid INFO: Epoch[109] Iteration[150/185] Loss: 5.061 (id 2.098 tri 0.010 i2t 1.051 | part_id 1.042 part_tri 0.002 part_i2t 1.183 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:08:58,059 transreid INFO: Epoch 109 done. Loss: 5.050 Time per batch: 0.108[s] Speed: 592.1[samples/s]
+2026-09-21 16:09:04,073 transreid INFO: Epoch[110] Iteration[50/185] Loss: 5.098 (id 2.113 tri 0.013 i2t 1.055 | part_id 1.049 part_tri 0.003 part_i2t 1.198 pix 0.763) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:09:09,319 transreid INFO: Epoch[110] Iteration[100/185] Loss: 5.074 (id 2.103 tri 0.011 i2t 1.053 | part_id 1.044 part_tri 0.002 part_i2t 1.190 pix 0.762) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:09:14,679 transreid INFO: Epoch[110] Iteration[150/185] Loss: 5.063 (id 2.098 tri 0.013 i2t 1.051 | part_id 1.042 part_tri 0.002 part_i2t 1.183 pix 0.760) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:09:17,935 transreid INFO: Epoch 110 done. Loss: 5.052 Time per batch: 0.109[s] Speed: 589.3[samples/s]
+2026-09-21 16:09:30,755 transreid INFO: Validation Results - Epoch: 110
+2026-09-21 16:09:30,755 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14499999582767487, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.2329999953508377} | gallery: {'global': 0.0, 'head': 0.2759999930858612, 'upper_arms_torso': 0.04699999839067459, 'lower_arms_torso': 0.06499999761581421, 'legs': 0.05000000074505806, 'feet': 0.3230000138282776}
+2026-09-21 16:09:30,839 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.5% | with no shared part: 1.94% | mean unmatched parts: 1.03
+2026-09-21 16:09:34,048 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.2%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:09:37,037 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.2%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 16:09:40,004 transreid INFO: [part_lse         ] mAP: 84.7%  Rank-1: 92.0%  Rank-5: 97.9%  Rank-10: 98.9%
+2026-09-21 16:09:40,108 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:09:46,155 transreid INFO: Epoch[111] Iteration[50/185] Loss: 5.101 (id 2.112 tri 0.011 i2t 1.058 | part_id 1.050 part_tri 0.003 part_i2t 1.201 pix 0.761) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:09:51,341 transreid INFO: Epoch[111] Iteration[100/185] Loss: 5.081 (id 2.105 tri 0.012 i2t 1.054 | part_id 1.046 part_tri 0.003 part_i2t 1.191 pix 0.759) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:09:56,614 transreid INFO: Epoch[111] Iteration[150/185] Loss: 5.064 (id 2.098 tri 0.011 i2t 1.052 | part_id 1.042 part_tri 0.003 part_i2t 1.183 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:09:59,827 transreid INFO: Epoch 111 done. Loss: 5.051 Time per batch: 0.108[s] Speed: 594.0[samples/s]
+2026-09-21 16:10:05,906 transreid INFO: Epoch[112] Iteration[50/185] Loss: 5.101 (id 2.113 tri 0.015 i2t 1.056 | part_id 1.049 part_tri 0.003 part_i2t 1.199 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:10:11,203 transreid INFO: Epoch[112] Iteration[100/185] Loss: 5.082 (id 2.105 tri 0.014 i2t 1.054 | part_id 1.046 part_tri 0.003 part_i2t 1.190 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:10:16,593 transreid INFO: Epoch[112] Iteration[150/185] Loss: 5.065 (id 2.098 tri 0.013 i2t 1.051 | part_id 1.042 part_tri 0.002 part_i2t 1.183 pix 0.759) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:10:19,851 transreid INFO: Epoch 112 done. Loss: 5.052 Time per batch: 0.109[s] Speed: 584.9[samples/s]
+2026-09-21 16:10:32,574 transreid INFO: Validation Results - Epoch: 112
+2026-09-21 16:10:32,581 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14800000190734863, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.2290000021457672} | gallery: {'global': 0.0, 'head': 0.27900001406669617, 'upper_arms_torso': 0.04600000008940697, 'lower_arms_torso': 0.06499999761581421, 'legs': 0.04899999871850014, 'feet': 0.3160000145435333}
+2026-09-21 16:10:32,658 transreid INFO: query-gallery pairs with >=1 unmatched part: 64.4% | with no shared part: 1.91% | mean unmatched parts: 1.03
+2026-09-21 16:10:35,694 transreid INFO: [clipreid_baseline] mAP: 89.1%  Rank-1: 95.2%  Rank-5: 98.5%  Rank-10: 99.0%
+2026-09-21 16:10:38,627 transreid INFO: [holistic         ] mAP: 89.0%  Rank-1: 95.4%  Rank-5: 98.3%  Rank-10: 99.1%
+2026-09-21 16:10:41,546 transreid INFO: [part_lse         ] mAP: 84.7%  Rank-1: 92.0%  Rank-5: 97.9%  Rank-10: 98.8%
+2026-09-21 16:10:41,656 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:10:47,810 transreid INFO: Epoch[113] Iteration[50/185] Loss: 5.103 (id 2.114 tri 0.018 i2t 1.056 | part_id 1.050 part_tri 0.003 part_i2t 1.197 pix 0.758) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:10:53,238 transreid INFO: Epoch[113] Iteration[100/185] Loss: 5.081 (id 2.105 tri 0.015 i2t 1.053 | part_id 1.045 part_tri 0.002 part_i2t 1.190 pix 0.758) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:10:58,537 transreid INFO: Epoch[113] Iteration[150/185] Loss: 5.064 (id 2.099 tri 0.013 i2t 1.051 | part_id 1.042 part_tri 0.002 part_i2t 1.182 pix 0.758) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:11:01,920 transreid INFO: Epoch 113 done. Loss: 5.054 Time per batch: 0.110[s] Speed: 581.2[samples/s]
+2026-09-21 16:11:08,026 transreid INFO: Epoch[114] Iteration[50/185] Loss: 5.101 (id 2.112 tri 0.018 i2t 1.056 | part_id 1.049 part_tri 0.002 part_i2t 1.197 pix 0.759) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:11:13,358 transreid INFO: Epoch[114] Iteration[100/185] Loss: 5.076 (id 2.103 tri 0.013 i2t 1.053 | part_id 1.044 part_tri 0.002 part_i2t 1.188 pix 0.759) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:11:18,615 transreid INFO: Epoch[114] Iteration[150/185] Loss: 5.056 (id 2.095 tri 0.012 i2t 1.050 | part_id 1.041 part_tri 0.002 part_i2t 1.180 pix 0.759) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:11:21,856 transreid INFO: Epoch 114 done. Loss: 5.045 Time per batch: 0.109[s] Speed: 587.5[samples/s]
+2026-09-21 16:11:34,359 transreid INFO: Validation Results - Epoch: 114
+2026-09-21 16:11:34,361 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14300000667572021, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.21699999272823334} | gallery: {'global': 0.0, 'head': 0.27300000190734863, 'upper_arms_torso': 0.04800000041723251, 'lower_arms_torso': 0.06700000166893005, 'legs': 0.052000001072883606, 'feet': 0.3109999895095825}
+2026-09-21 16:11:34,436 transreid INFO: query-gallery pairs with >=1 unmatched part: 63.0% | with no shared part: 1.99% | mean unmatched parts: 1.01
+2026-09-21 16:11:37,424 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.2%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:11:40,362 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.5%  Rank-5: 98.2%  Rank-10: 99.1%
+2026-09-21 16:11:43,308 transreid INFO: [part_lse         ] mAP: 84.6%  Rank-1: 91.8%  Rank-5: 97.8%  Rank-10: 98.9%
+2026-09-21 16:11:43,417 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:11:49,647 transreid INFO: Epoch[115] Iteration[50/185] Loss: 5.096 (id 2.114 tri 0.010 i2t 1.057 | part_id 1.050 part_tri 0.002 part_i2t 1.198 pix 0.755) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:11:54,971 transreid INFO: Epoch[115] Iteration[100/185] Loss: 5.078 (id 2.105 tri 0.012 i2t 1.054 | part_id 1.045 part_tri 0.002 part_i2t 1.190 pix 0.757) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:12:00,264 transreid INFO: Epoch[115] Iteration[150/185] Loss: 5.059 (id 2.098 tri 0.011 i2t 1.051 | part_id 1.042 part_tri 0.002 part_i2t 1.181 pix 0.757) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:12:03,589 transreid INFO: Epoch 115 done. Loss: 5.045 Time per batch: 0.110[s] Speed: 583.8[samples/s]
+2026-09-21 16:12:09,517 transreid INFO: Epoch[116] Iteration[50/185] Loss: 5.092 (id 2.110 tri 0.012 i2t 1.056 | part_id 1.048 part_tri 0.002 part_i2t 1.198 pix 0.759) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:12:14,909 transreid INFO: Epoch[116] Iteration[100/185] Loss: 5.069 (id 2.102 tri 0.010 i2t 1.052 | part_id 1.044 part_tri 0.002 part_i2t 1.187 pix 0.758) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:12:20,208 transreid INFO: Epoch[116] Iteration[150/185] Loss: 5.058 (id 2.097 tri 0.011 i2t 1.051 | part_id 1.041 part_tri 0.002 part_i2t 1.181 pix 0.756) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:12:23,444 transreid INFO: Epoch 116 done. Loss: 5.047 Time per batch: 0.108[s] Speed: 589.9[samples/s]
+2026-09-21 16:12:35,946 transreid INFO: Validation Results - Epoch: 116
+2026-09-21 16:12:35,956 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.1469999998807907, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.21899999678134918} | gallery: {'global': 0.0, 'head': 0.2770000100135803, 'upper_arms_torso': 0.04800000041723251, 'lower_arms_torso': 0.06700000166893005, 'legs': 0.05299999937415123, 'feet': 0.3179999887943268}
+2026-09-21 16:12:36,032 transreid INFO: query-gallery pairs with >=1 unmatched part: 63.8% | with no shared part: 2.02% | mean unmatched parts: 1.03
+2026-09-21 16:12:39,031 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:12:41,984 transreid INFO: [holistic         ] mAP: 89.1%  Rank-1: 95.5%  Rank-5: 98.3%  Rank-10: 99.1%
+2026-09-21 16:12:44,952 transreid INFO: [part_lse         ] mAP: 84.6%  Rank-1: 92.0%  Rank-5: 97.7%  Rank-10: 98.9%
+2026-09-21 16:12:45,063 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:12:51,127 transreid INFO: Epoch[117] Iteration[50/185] Loss: 5.093 (id 2.110 tri 0.013 i2t 1.055 | part_id 1.048 part_tri 0.002 part_i2t 1.197 pix 0.757) Acc: 0.999, Base Lr: 3.50e-06
+2026-09-21 16:12:56,442 transreid INFO: Epoch[117] Iteration[100/185] Loss: 5.077 (id 2.103 tri 0.013 i2t 1.053 | part_id 1.045 part_tri 0.003 part_i2t 1.189 pix 0.757) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:13:01,809 transreid INFO: Epoch[117] Iteration[150/185] Loss: 5.060 (id 2.097 tri 0.012 i2t 1.051 | part_id 1.042 part_tri 0.002 part_i2t 1.182 pix 0.757) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:13:05,180 transreid INFO: Epoch 117 done. Loss: 5.048 Time per batch: 0.110[s] Speed: 582.2[samples/s]
+2026-09-21 16:13:11,276 transreid INFO: Epoch[118] Iteration[50/185] Loss: 5.091 (id 2.110 tri 0.012 i2t 1.055 | part_id 1.048 part_tri 0.003 part_i2t 1.195 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:13:16,670 transreid INFO: Epoch[118] Iteration[100/185] Loss: 5.073 (id 2.103 tri 0.010 i2t 1.053 | part_id 1.044 part_tri 0.002 part_i2t 1.189 pix 0.760) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:13:21,921 transreid INFO: Epoch[118] Iteration[150/185] Loss: 5.056 (id 2.096 tri 0.012 i2t 1.050 | part_id 1.041 part_tri 0.002 part_i2t 1.181 pix 0.759) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:13:25,345 transreid INFO: Epoch 118 done. Loss: 5.043 Time per batch: 0.110[s] Speed: 584.0[samples/s]
+2026-09-21 16:13:37,829 transreid INFO: Validation Results - Epoch: 118
+2026-09-21 16:13:37,829 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14300000667572021, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.2029999941587448} | gallery: {'global': 0.0, 'head': 0.2750000059604645, 'upper_arms_torso': 0.04699999839067459, 'lower_arms_torso': 0.06300000101327896, 'legs': 0.04899999871850014, 'feet': 0.2980000078678131}
+2026-09-21 16:13:37,906 transreid INFO: query-gallery pairs with >=1 unmatched part: 61.9% | with no shared part: 1.85% | mean unmatched parts: 0.99
+2026-09-21 16:13:40,902 transreid INFO: [clipreid_baseline] mAP: 89.2%  Rank-1: 95.3%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:13:43,840 transreid INFO: [holistic         ] mAP: 89.2%  Rank-1: 95.5%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:13:46,756 transreid INFO: [part_lse         ] mAP: 84.9%  Rank-1: 92.2%  Rank-5: 97.9%  Rank-10: 99.0%
+2026-09-21 16:13:46,887 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:13:53,275 transreid INFO: Epoch[119] Iteration[50/185] Loss: 5.086 (id 2.107 tri 0.013 i2t 1.055 | part_id 1.047 part_tri 0.002 part_i2t 1.194 pix 0.758) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:13:58,713 transreid INFO: Epoch[119] Iteration[100/185] Loss: 5.072 (id 2.102 tri 0.012 i2t 1.053 | part_id 1.044 part_tri 0.002 part_i2t 1.187 pix 0.758) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:14:04,056 transreid INFO: Epoch[119] Iteration[150/185] Loss: 5.055 (id 2.095 tri 0.012 i2t 1.050 | part_id 1.041 part_tri 0.002 part_i2t 1.180 pix 0.757) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:14:07,404 transreid INFO: Epoch 119 done. Loss: 5.043 Time per batch: 0.112[s] Speed: 570.8[samples/s]
+2026-09-21 16:14:13,479 transreid INFO: Epoch[120] Iteration[50/185] Loss: 5.079 (id 2.105 tri 0.012 i2t 1.053 | part_id 1.046 part_tri 0.002 part_i2t 1.192 pix 0.758) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:14:18,883 transreid INFO: Epoch[120] Iteration[100/185] Loss: 5.069 (id 2.101 tri 0.013 i2t 1.052 | part_id 1.043 part_tri 0.002 part_i2t 1.185 pix 0.758) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:14:24,356 transreid INFO: Epoch[120] Iteration[150/185] Loss: 5.052 (id 2.095 tri 0.012 i2t 1.050 | part_id 1.040 part_tri 0.002 part_i2t 1.178 pix 0.757) Acc: 1.000, Base Lr: 3.50e-06
+2026-09-21 16:14:27,711 transreid INFO: Epoch 120 done. Loss: 5.041 Time per batch: 0.111[s] Speed: 576.8[samples/s]
+2026-09-21 16:14:28,027 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage2/RN50_part_stage2_120.pth
+2026-09-21 16:14:40,826 transreid INFO: Validation Results - Epoch: 120
+2026-09-21 16:14:40,837 transreid INFO: invisible rate per slot | query: {'global': 0.0, 'head': 0.14499999582767487, 'upper_arms_torso': 0.0, 'lower_arms_torso': 0.003000000026077032, 'legs': 0.007000000216066837, 'feet': 0.21699999272823334} | gallery: {'global': 0.0, 'head': 0.2770000100135803, 'upper_arms_torso': 0.04800000041723251, 'lower_arms_torso': 0.06400000303983688, 'legs': 0.05400000140070915, 'feet': 0.31299999356269836}
+2026-09-21 16:14:40,913 transreid INFO: query-gallery pairs with >=1 unmatched part: 63.3% | with no shared part: 2.02% | mean unmatched parts: 1.02
+2026-09-21 16:14:44,449 transreid INFO: [clipreid_baseline] mAP: 89.0%  Rank-1: 95.1%  Rank-5: 98.5%  Rank-10: 99.1%
+2026-09-21 16:14:47,595 transreid INFO: [holistic         ] mAP: 88.9%  Rank-1: 95.2%  Rank-5: 98.4%  Rank-10: 99.1%
+2026-09-21 16:14:50,569 transreid INFO: [part_lse         ] mAP: 84.5%  Rank-1: 91.7%  Rank-5: 97.9%  Rank-10: 98.8%
+2026-09-21 16:14:50,681 transreid INFO: best so far: clipreid_baseline mAP 89.3% R1 95.4% @epoch 84 | holistic mAP 89.2% R1 95.3% @epoch 84 | part_lse mAP 85.1% R1 92.4% @epoch 94
+2026-09-21 16:14:50,681 transreid INFO: Total running time: 0:58:58.150572

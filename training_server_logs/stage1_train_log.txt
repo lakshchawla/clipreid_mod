@@ -1,0 +1,333 @@
+2026-09-21 14:24:52,370 transreid INFO: knobs: H=256, W=128, STRIDE=16, N_CTX=4, MAX_EPOCHS=60, IMS_PER_BATCH=64, BASE_LR=0.0005, WARMUP_LR_INIT=1e-05, LR_MIN=1e-06, WARMUP_EPOCHS=5, WEIGHT_DECAY=0.0001, FULL_POOL_NEGATIVES=True, T2I_BATCH_POSITIVES=True, CONTRAST_NORMALIZE=True, CONTRAST_TEMP=0.01, TEXT_BANK_REFRESH=1, TEXT_BANK_MOMENTUM=0.0, NUM_IDS=None, IMAGE_DIR=../../datasets/Market-1501-v15.09.15/bounding_box_train, MASKS_DIR=../../datasets/market1501/masks/pifpaf_maskrcnn_filtering/bounding_box_train
+2026-09-21 14:24:55,753 transreid INFO: 12936 images, 751 identities, slots: ['global', 'head', 'upper_arms_torso', 'lower_arms_torso', 'legs', 'feet']
+2026-09-21 14:24:58,228 transreid INFO: extracted 3200/12936 images
+2026-09-21 14:25:00,481 transreid INFO: extracted 6400/12936 images
+2026-09-21 14:25:03,287 transreid INFO: extracted 9600/12936 images
+2026-09-21 14:25:06,102 transreid INFO: extracted 12800/12936 images
+2026-09-21 14:25:06,233 transreid INFO: feature extraction time: 0:00:10.479624
+2026-09-21 14:25:06,234 transreid INFO: img_feats (12936, 6, 1024) | visibility (12936, 6) | visible fraction per slot: {'global': 1.0, 'head': 0.8429999947547913, 'upper_arms_torso': 0.9900000095367432, 'lower_arms_torso': 0.9860000014305115, 'legs': 0.9599999785423279, 'feet': 0.8460000157356262}
+2026-09-21 14:25:06,305 transreid INFO: templates:
+A photo of a X X X X person.
+A photo of the head of a X X X X person.
+A photo of the upper arms torso of a X X X X person.
+A photo of the lower arms torso of a X X X X person.
+A photo of the legs of a X X X X person.
+A photo of the feet of a X X X X person.
+2026-09-21 14:25:06,306 transreid INFO: trainable parameters: 9,228,288 (cls_ctx (751, 6, 4, 512))
+2026-09-21 14:25:07,084 transreid INFO: before training image->text top-1 per slot: {'global': 0.001, 'head': 0.001, 'upper_arms_torso': 0.001, 'lower_arms_torso': 0.002, 'legs': 0.001, 'feet': 0.001} (chance 0.0013)
+2026-09-21 14:25:07,085 transreid INFO: full-dataset negatives: t2i pool per slot = [12936, 10904, 12801, 12760, 12425, 10941] images, i2t pool = 751 prompts
+2026-09-21 14:25:07,085 transreid INFO: start training
+2026-09-21 14:25:07,085 transreid INFO: t2i: batch positives, dataset negatives (out-of-batch same-identity images masked out); floor ~0. i2t bank write-back momentum 0.0
+2026-09-21 14:25:15,233 transreid INFO: Epoch[1] Iteration[50/203] Loss: 113.014, Base Lr: 1.08e-04
+2026-09-21 14:25:22,439 transreid INFO: Epoch[1] Iteration[100/203] Loss: 107.787, Base Lr: 1.08e-04
+2026-09-21 14:25:29,667 transreid INFO: Epoch[1] Iteration[150/203] Loss: 103.713, Base Lr: 1.08e-04
+2026-09-21 14:25:36,877 transreid INFO: Epoch[1] Iteration[200/203] Loss: 100.662, Base Lr: 1.08e-04
+2026-09-21 14:25:37,226 transreid INFO: Epoch[1] done. Loss: 100.561 (i2t 38.152, t2i 62.024, above floor 100.561) per slot {'global': 15.554, 'head': 17.915, 'upper_arms_torso': 16.281, 'lower_arms_torso': 16.356, 'legs': 16.468, 'feet': 17.972} Base Lr: 1.08e-04
+2026-09-21 14:25:45,381 transreid INFO: Epoch[2] Iteration[50/203] Loss: 83.222, Base Lr: 2.06e-04
+2026-09-21 14:25:59,404 transreid INFO: Epoch[2] Iteration[100/203] Loss: 83.756, Base Lr: 2.06e-04
+2026-09-21 14:26:16,281 transreid INFO: Epoch[2] Iteration[150/203] Loss: 83.135, Base Lr: 2.06e-04
+2026-09-21 14:26:33,176 transreid INFO: Epoch[2] Iteration[200/203] Loss: 82.282, Base Lr: 2.06e-04
+2026-09-21 14:26:34,005 transreid INFO: Epoch[2] done. Loss: 82.269 (i2t 33.009, t2i 48.494, above floor 82.269) per slot {'global': 12.274, 'head': 16.08, 'upper_arms_torso': 12.07, 'lower_arms_torso': 12.052, 'legs': 13.481, 'feet': 16.319} Base Lr: 2.06e-04
+2026-09-21 14:26:52,225 transreid INFO: Epoch[3] Iteration[50/203] Loss: 71.557, Base Lr: 3.04e-04
+2026-09-21 14:27:09,103 transreid INFO: Epoch[3] Iteration[100/203] Loss: 72.504, Base Lr: 3.04e-04
+2026-09-21 14:27:25,931 transreid INFO: Epoch[3] Iteration[150/203] Loss: 72.870, Base Lr: 3.04e-04
+2026-09-21 14:27:42,763 transreid INFO: Epoch[3] Iteration[200/203] Loss: 72.736, Base Lr: 3.04e-04
+2026-09-21 14:27:43,595 transreid INFO: Epoch[3] done. Loss: 72.779 (i2t 29.264, t2i 42.573, above floor 72.779) per slot {'global': 10.546, 'head': 15.207, 'upper_arms_torso': 10.233, 'lower_arms_torso': 9.896, 'legs': 11.684, 'feet': 15.222} Base Lr: 3.04e-04
+2026-09-21 14:28:01,866 transreid INFO: Epoch[4] Iteration[50/203] Loss: 63.996, Base Lr: 4.02e-04
+2026-09-21 14:28:18,743 transreid INFO: Epoch[4] Iteration[100/203] Loss: 65.526, Base Lr: 4.02e-04
+2026-09-21 14:28:35,582 transreid INFO: Epoch[4] Iteration[150/203] Loss: 66.058, Base Lr: 4.02e-04
+2026-09-21 14:28:52,463 transreid INFO: Epoch[4] Iteration[200/203] Loss: 66.206, Base Lr: 4.02e-04
+2026-09-21 14:28:53,284 transreid INFO: Epoch[4] done. Loss: 66.185 (i2t 25.848, t2i 39.337, above floor 66.185) per slot {'global': 9.253, 'head': 14.189, 'upper_arms_torso': 9.148, 'lower_arms_torso': 8.62, 'legs': 10.617, 'feet': 14.36} Base Lr: 4.02e-04
+2026-09-21 14:29:11,547 transreid INFO: Epoch[5] Iteration[50/203] Loss: 57.234, Base Lr: 4.91e-04
+2026-09-21 14:29:28,376 transreid INFO: Epoch[5] Iteration[100/203] Loss: 59.405, Base Lr: 4.91e-04
+2026-09-21 14:29:45,272 transreid INFO: Epoch[5] Iteration[150/203] Loss: 60.454, Base Lr: 4.91e-04
+2026-09-21 14:30:02,099 transreid INFO: Epoch[5] Iteration[200/203] Loss: 61.101, Base Lr: 4.91e-04
+2026-09-21 14:30:02,932 transreid INFO: Epoch[5] done. Loss: 61.123 (i2t 22.888, t2i 37.246, above floor 61.123) per slot {'global': 8.271, 'head': 13.208, 'upper_arms_torso': 8.355, 'lower_arms_torso': 7.774, 'legs': 9.97, 'feet': 13.55} Base Lr: 4.91e-04
+2026-09-21 14:30:21,177 transreid INFO: Epoch[6] Iteration[50/203] Loss: 51.833, Base Lr: 4.88e-04
+2026-09-21 14:30:38,064 transreid INFO: Epoch[6] Iteration[100/203] Loss: 52.974, Base Lr: 4.88e-04
+2026-09-21 14:30:55,010 transreid INFO: Epoch[6] Iteration[150/203] Loss: 54.011, Base Lr: 4.88e-04
+2026-09-21 14:31:11,912 transreid INFO: Epoch[6] Iteration[200/203] Loss: 54.764, Base Lr: 4.88e-04
+2026-09-21 14:31:12,731 transreid INFO: Epoch[6] done. Loss: 54.839 (i2t 19.216, t2i 34.686, above floor 54.839) per slot {'global': 7.3, 'head': 11.878, 'upper_arms_torso': 7.444, 'lower_arms_torso': 6.721, 'legs': 9.024, 'feet': 12.484} Base Lr: 4.88e-04
+2026-09-21 14:31:30,996 transreid INFO: Epoch[7] Iteration[50/203] Loss: 47.227, Base Lr: 4.83e-04
+2026-09-21 14:31:42,527 transreid INFO: Epoch[7] Iteration[100/203] Loss: 48.978, Base Lr: 4.83e-04
+2026-09-21 14:31:55,468 transreid INFO: Epoch[7] Iteration[150/203] Loss: 50.029, Base Lr: 4.83e-04
+2026-09-21 14:32:08,205 transreid INFO: Epoch[7] Iteration[200/203] Loss: 50.989, Base Lr: 4.83e-04
+2026-09-21 14:32:08,873 transreid INFO: Epoch[7] done. Loss: 51.050 (i2t 17.046, t2i 33.074, above floor 51.050) per slot {'global': 6.679, 'head': 11.066, 'upper_arms_torso': 6.812, 'lower_arms_torso': 6.179, 'legs': 8.485, 'feet': 11.819} Base Lr: 4.83e-04
+2026-09-21 14:32:22,738 transreid INFO: Epoch[8] Iteration[50/203] Loss: 44.917, Base Lr: 4.78e-04
+2026-09-21 14:32:35,760 transreid INFO: Epoch[8] Iteration[100/203] Loss: 46.373, Base Lr: 4.78e-04
+2026-09-21 14:32:48,393 transreid INFO: Epoch[8] Iteration[150/203] Loss: 47.601, Base Lr: 4.78e-04
+2026-09-21 14:33:01,092 transreid INFO: Epoch[8] Iteration[200/203] Loss: 48.494, Base Lr: 4.78e-04
+2026-09-21 14:33:01,732 transreid INFO: Epoch[8] done. Loss: 48.549 (i2t 15.695, t2i 31.956, above floor 48.549) per slot {'global': 6.265, 'head': 10.503, 'upper_arms_torso': 6.446, 'lower_arms_torso': 5.764, 'legs': 8.168, 'feet': 11.406} Base Lr: 4.78e-04
+2026-09-21 14:33:15,567 transreid INFO: Epoch[9] Iteration[50/203] Loss: 42.626, Base Lr: 4.73e-04
+2026-09-21 14:33:28,677 transreid INFO: Epoch[9] Iteration[100/203] Loss: 44.574, Base Lr: 4.73e-04
+2026-09-21 14:33:41,446 transreid INFO: Epoch[9] Iteration[150/203] Loss: 45.761, Base Lr: 4.73e-04
+2026-09-21 14:33:54,051 transreid INFO: Epoch[9] Iteration[200/203] Loss: 46.469, Base Lr: 4.73e-04
+2026-09-21 14:33:54,708 transreid INFO: Epoch[9] done. Loss: 46.486 (i2t 14.599, t2i 31.005, above floor 46.486) per slot {'global': 5.985, 'head': 10.044, 'upper_arms_torso': 6.107, 'lower_arms_torso': 5.44, 'legs': 7.839, 'feet': 11.073} Base Lr: 4.73e-04
+2026-09-21 14:34:09,052 transreid INFO: Epoch[10] Iteration[50/203] Loss: 40.651, Base Lr: 4.67e-04
+2026-09-21 14:34:21,717 transreid INFO: Epoch[10] Iteration[100/203] Loss: 42.843, Base Lr: 4.67e-04
+2026-09-21 14:34:34,507 transreid INFO: Epoch[10] Iteration[150/203] Loss: 43.958, Base Lr: 4.67e-04
+2026-09-21 14:34:47,387 transreid INFO: Epoch[10] Iteration[200/203] Loss: 44.994, Base Lr: 4.67e-04
+2026-09-21 14:34:48,038 transreid INFO: Epoch[10] done. Loss: 45.044 (i2t 13.796, t2i 30.366, above floor 45.044) per slot {'global': 5.76, 'head': 9.714, 'upper_arms_torso': 5.897, 'lower_arms_torso': 5.177, 'legs': 7.661, 'feet': 10.822} Base Lr: 4.67e-04
+2026-09-21 14:34:49,162 transreid INFO: Epoch[10] image->text top-1 per slot: {'global': 0.749, 'head': 0.488, 'upper_arms_torso': 0.69, 'lower_arms_torso': 0.742, 'legs': 0.565, 'feet': 0.434}
+2026-09-21 14:34:49,259 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_10.pth
+2026-09-21 14:35:03,206 transreid INFO: Epoch[11] Iteration[50/203] Loss: 39.848, Base Lr: 4.60e-04
+2026-09-21 14:35:15,920 transreid INFO: Epoch[11] Iteration[100/203] Loss: 41.699, Base Lr: 4.60e-04
+2026-09-21 14:35:28,660 transreid INFO: Epoch[11] Iteration[150/203] Loss: 42.926, Base Lr: 4.60e-04
+2026-09-21 14:35:41,645 transreid INFO: Epoch[11] Iteration[200/203] Loss: 43.867, Base Lr: 4.60e-04
+2026-09-21 14:35:42,264 transreid INFO: Epoch[11] done. Loss: 43.888 (i2t 13.205, t2i 29.828, above floor 43.888) per slot {'global': 5.579, 'head': 9.454, 'upper_arms_torso': 5.726, 'lower_arms_torso': 4.998, 'legs': 7.51, 'feet': 10.625} Base Lr: 4.60e-04
+2026-09-21 14:35:56,201 transreid INFO: Epoch[12] Iteration[50/203] Loss: 38.753, Base Lr: 4.52e-04
+2026-09-21 14:36:08,944 transreid INFO: Epoch[12] Iteration[100/203] Loss: 40.498, Base Lr: 4.52e-04
+2026-09-21 14:36:21,907 transreid INFO: Epoch[12] Iteration[150/203] Loss: 41.858, Base Lr: 4.52e-04
+2026-09-21 14:36:34,663 transreid INFO: Epoch[12] Iteration[200/203] Loss: 42.791, Base Lr: 4.52e-04
+2026-09-21 14:36:35,292 transreid INFO: Epoch[12] done. Loss: 42.795 (i2t 12.683, t2i 29.264, above floor 42.795) per slot {'global': 5.422, 'head': 9.231, 'upper_arms_torso': 5.552, 'lower_arms_torso': 4.85, 'legs': 7.35, 'feet': 10.388} Base Lr: 4.52e-04
+2026-09-21 14:36:49,207 transreid INFO: Epoch[13] Iteration[50/203] Loss: 38.323, Base Lr: 4.44e-04
+2026-09-21 14:37:02,186 transreid INFO: Epoch[13] Iteration[100/203] Loss: 39.659, Base Lr: 4.44e-04
+2026-09-21 14:37:14,939 transreid INFO: Epoch[13] Iteration[150/203] Loss: 41.034, Base Lr: 4.44e-04
+2026-09-21 14:37:27,674 transreid INFO: Epoch[13] Iteration[200/203] Loss: 42.041, Base Lr: 4.44e-04
+2026-09-21 14:37:28,316 transreid INFO: Epoch[13] done. Loss: 42.106 (i2t 12.287, t2i 28.977, above floor 42.106) per slot {'global': 5.308, 'head': 9.033, 'upper_arms_torso': 5.443, 'lower_arms_torso': 4.72, 'legs': 7.262, 'feet': 10.343} Base Lr: 4.44e-04
+2026-09-21 14:37:42,215 transreid INFO: Epoch[14] Iteration[50/203] Loss: 37.366, Base Lr: 4.36e-04
+2026-09-21 14:37:55,173 transreid INFO: Epoch[14] Iteration[100/203] Loss: 38.911, Base Lr: 4.36e-04
+2026-09-21 14:38:07,943 transreid INFO: Epoch[14] Iteration[150/203] Loss: 40.111, Base Lr: 4.36e-04
+2026-09-21 14:38:20,679 transreid INFO: Epoch[14] Iteration[200/203] Loss: 41.201, Base Lr: 4.36e-04
+2026-09-21 14:38:21,326 transreid INFO: Epoch[14] done. Loss: 41.266 (i2t 11.845, t2i 28.578, above floor 41.266) per slot {'global': 5.168, 'head': 8.877, 'upper_arms_torso': 5.324, 'lower_arms_torso': 4.586, 'legs': 7.132, 'feet': 10.173} Base Lr: 4.36e-04
+2026-09-21 14:38:35,546 transreid INFO: Epoch[15] Iteration[50/203] Loss: 36.878, Base Lr: 4.27e-04
+2026-09-21 14:38:48,231 transreid INFO: Epoch[15] Iteration[100/203] Loss: 38.343, Base Lr: 4.27e-04
+2026-09-21 14:39:00,953 transreid INFO: Epoch[15] Iteration[150/203] Loss: 39.319, Base Lr: 4.27e-04
+2026-09-21 14:39:14,026 transreid INFO: Epoch[15] Iteration[200/203] Loss: 40.442, Base Lr: 4.27e-04
+2026-09-21 14:39:14,632 transreid INFO: Epoch[15] done. Loss: 40.455 (i2t 11.499, t2i 28.119, above floor 40.455) per slot {'global': 5.046, 'head': 8.694, 'upper_arms_torso': 5.182, 'lower_arms_torso': 4.444, 'legs': 7.041, 'feet': 10.043} Base Lr: 4.27e-04
+2026-09-21 14:39:28,630 transreid INFO: Epoch[16] Iteration[50/203] Loss: 36.277, Base Lr: 4.17e-04
+2026-09-21 14:39:41,364 transreid INFO: Epoch[16] Iteration[100/203] Loss: 37.700, Base Lr: 4.17e-04
+2026-09-21 14:39:53,979 transreid INFO: Epoch[16] Iteration[150/203] Loss: 38.984, Base Lr: 4.17e-04
+2026-09-21 14:40:06,891 transreid INFO: Epoch[16] Iteration[200/203] Loss: 39.851, Base Lr: 4.17e-04
+2026-09-21 14:40:07,507 transreid INFO: Epoch[16] done. Loss: 39.918 (i2t 11.214, t2i 27.880, above floor 39.918) per slot {'global': 4.992, 'head': 8.56, 'upper_arms_torso': 5.102, 'lower_arms_torso': 4.351, 'legs': 6.938, 'feet': 9.979} Base Lr: 4.17e-04
+2026-09-21 14:40:21,359 transreid INFO: Epoch[17] Iteration[50/203] Loss: 35.856, Base Lr: 4.08e-04
+2026-09-21 14:40:34,016 transreid INFO: Epoch[17] Iteration[100/203] Loss: 36.868, Base Lr: 4.08e-04
+2026-09-21 14:40:46,942 transreid INFO: Epoch[17] Iteration[150/203] Loss: 38.265, Base Lr: 4.08e-04
+2026-09-21 14:40:59,592 transreid INFO: Epoch[17] Iteration[200/203] Loss: 39.263, Base Lr: 4.08e-04
+2026-09-21 14:41:00,232 transreid INFO: Epoch[17] done. Loss: 39.261 (i2t 10.910, t2i 27.538, above floor 39.261) per slot {'global': 4.919, 'head': 8.433, 'upper_arms_torso': 4.976, 'lower_arms_torso': 4.267, 'legs': 6.858, 'feet': 9.813} Base Lr: 4.08e-04
+2026-09-21 14:41:14,089 transreid INFO: Epoch[18] Iteration[50/203] Loss: 35.508, Base Lr: 3.97e-04
+2026-09-21 14:41:26,936 transreid INFO: Epoch[18] Iteration[100/203] Loss: 36.466, Base Lr: 3.97e-04
+2026-09-21 14:41:39,608 transreid INFO: Epoch[18] Iteration[150/203] Loss: 37.764, Base Lr: 3.97e-04
+2026-09-21 14:41:52,334 transreid INFO: Epoch[18] Iteration[200/203] Loss: 38.592, Base Lr: 3.97e-04
+2026-09-21 14:41:52,958 transreid INFO: Epoch[18] done. Loss: 38.648 (i2t 10.592, t2i 27.245, above floor 38.648) per slot {'global': 4.797, 'head': 8.314, 'upper_arms_torso': 4.881, 'lower_arms_torso': 4.167, 'legs': 6.782, 'feet': 9.712} Base Lr: 3.97e-04
+2026-09-21 14:42:06,993 transreid INFO: Epoch[19] Iteration[50/203] Loss: 34.071, Base Lr: 3.86e-04
+2026-09-21 14:42:19,995 transreid INFO: Epoch[19] Iteration[100/203] Loss: 35.986, Base Lr: 3.86e-04
+2026-09-21 14:42:32,746 transreid INFO: Epoch[19] Iteration[150/203] Loss: 37.115, Base Lr: 3.86e-04
+2026-09-21 14:42:45,427 transreid INFO: Epoch[19] Iteration[200/203] Loss: 38.091, Base Lr: 3.86e-04
+2026-09-21 14:42:46,039 transreid INFO: Epoch[19] done. Loss: 38.124 (i2t 10.314, t2i 27.002, above floor 38.124) per slot {'global': 4.743, 'head': 8.183, 'upper_arms_torso': 4.818, 'lower_arms_torso': 4.068, 'legs': 6.663, 'feet': 9.652} Base Lr: 3.86e-04
+2026-09-21 14:43:00,238 transreid INFO: Epoch[20] Iteration[50/203] Loss: 34.352, Base Lr: 3.75e-04
+2026-09-21 14:43:12,961 transreid INFO: Epoch[20] Iteration[100/203] Loss: 35.517, Base Lr: 3.75e-04
+2026-09-21 14:43:25,741 transreid INFO: Epoch[20] Iteration[150/203] Loss: 36.702, Base Lr: 3.75e-04
+2026-09-21 14:43:38,685 transreid INFO: Epoch[20] Iteration[200/203] Loss: 37.644, Base Lr: 3.75e-04
+2026-09-21 14:43:39,365 transreid INFO: Epoch[20] done. Loss: 37.706 (i2t 10.144, t2i 26.753, above floor 37.706) per slot {'global': 4.66, 'head': 8.099, 'upper_arms_torso': 4.735, 'lower_arms_torso': 4.015, 'legs': 6.624, 'feet': 9.573} Base Lr: 3.75e-04
+2026-09-21 14:43:40,555 transreid INFO: Epoch[20] image->text top-1 per slot: {'global': 0.845, 'head': 0.612, 'upper_arms_torso': 0.788, 'lower_arms_torso': 0.836, 'legs': 0.669, 'feet': 0.52}
+2026-09-21 14:43:40,649 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_20.pth
+2026-09-21 14:43:54,523 transreid INFO: Epoch[21] Iteration[50/203] Loss: 32.924, Base Lr: 3.64e-04
+2026-09-21 14:44:07,290 transreid INFO: Epoch[21] Iteration[100/203] Loss: 34.851, Base Lr: 3.64e-04
+2026-09-21 14:44:20,090 transreid INFO: Epoch[21] Iteration[150/203] Loss: 35.938, Base Lr: 3.64e-04
+2026-09-21 14:44:33,119 transreid INFO: Epoch[21] Iteration[200/203] Loss: 37.072, Base Lr: 3.64e-04
+2026-09-21 14:44:33,723 transreid INFO: Epoch[21] done. Loss: 37.105 (i2t 9.821, t2i 26.478, above floor 37.105) per slot {'global': 4.577, 'head': 7.961, 'upper_arms_torso': 4.639, 'lower_arms_torso': 3.903, 'legs': 6.557, 'feet': 9.465} Base Lr: 3.64e-04
+2026-09-21 14:44:47,605 transreid INFO: Epoch[22] Iteration[50/203] Loss: 32.949, Base Lr: 3.52e-04
+2026-09-21 14:45:00,466 transreid INFO: Epoch[22] Iteration[100/203] Loss: 33.995, Base Lr: 3.52e-04
+2026-09-21 14:45:13,416 transreid INFO: Epoch[22] Iteration[150/203] Loss: 35.390, Base Lr: 3.52e-04
+2026-09-21 14:45:26,076 transreid INFO: Epoch[22] Iteration[200/203] Loss: 36.528, Base Lr: 3.52e-04
+2026-09-21 14:45:26,739 transreid INFO: Epoch[22] done. Loss: 36.558 (i2t 9.543, t2i 26.209, above floor 36.558) per slot {'global': 4.496, 'head': 7.836, 'upper_arms_torso': 4.564, 'lower_arms_torso': 3.797, 'legs': 6.476, 'feet': 9.381} Base Lr: 3.52e-04
+2026-09-21 14:45:40,687 transreid INFO: Epoch[23] Iteration[50/203] Loss: 32.664, Base Lr: 3.40e-04
+2026-09-21 14:45:53,671 transreid INFO: Epoch[23] Iteration[100/203] Loss: 33.843, Base Lr: 3.40e-04
+2026-09-21 14:46:06,363 transreid INFO: Epoch[23] Iteration[150/203] Loss: 34.949, Base Lr: 3.40e-04
+2026-09-21 14:46:19,095 transreid INFO: Epoch[23] Iteration[200/203] Loss: 35.992, Base Lr: 3.40e-04
+2026-09-21 14:46:19,732 transreid INFO: Epoch[23] done. Loss: 36.064 (i2t 9.388, t2i 25.881, above floor 36.064) per slot {'global': 4.444, 'head': 7.731, 'upper_arms_torso': 4.503, 'lower_arms_torso': 3.712, 'legs': 6.389, 'feet': 9.281} Base Lr: 3.40e-04
+2026-09-21 14:46:33,865 transreid INFO: Epoch[24] Iteration[50/203] Loss: 32.232, Base Lr: 3.28e-04
+2026-09-21 14:46:46,779 transreid INFO: Epoch[24] Iteration[100/203] Loss: 33.770, Base Lr: 3.28e-04
+2026-09-21 14:46:59,482 transreid INFO: Epoch[24] Iteration[150/203] Loss: 34.504, Base Lr: 3.28e-04
+2026-09-21 14:47:12,152 transreid INFO: Epoch[24] Iteration[200/203] Loss: 35.677, Base Lr: 3.28e-04
+2026-09-21 14:47:12,812 transreid INFO: Epoch[24] done. Loss: 35.702 (i2t 9.220, t2i 25.692, above floor 35.702) per slot {'global': 4.374, 'head': 7.616, 'upper_arms_torso': 4.442, 'lower_arms_torso': 3.685, 'legs': 6.348, 'feet': 9.235} Base Lr: 3.28e-04
+2026-09-21 14:47:27,037 transreid INFO: Epoch[25] Iteration[50/203] Loss: 31.579, Base Lr: 3.15e-04
+2026-09-21 14:47:39,754 transreid INFO: Epoch[25] Iteration[100/203] Loss: 33.108, Base Lr: 3.15e-04
+2026-09-21 14:47:52,502 transreid INFO: Epoch[25] Iteration[150/203] Loss: 34.180, Base Lr: 3.15e-04
+2026-09-21 14:48:05,459 transreid INFO: Epoch[25] Iteration[200/203] Loss: 35.118, Base Lr: 3.15e-04
+2026-09-21 14:48:06,104 transreid INFO: Epoch[25] done. Loss: 35.153 (i2t 8.917, t2i 25.445, above floor 35.153) per slot {'global': 4.309, 'head': 7.535, 'upper_arms_torso': 4.35, 'lower_arms_torso': 3.577, 'legs': 6.242, 'feet': 9.137} Base Lr: 3.15e-04
+2026-09-21 14:48:19,967 transreid INFO: Epoch[26] Iteration[50/203] Loss: 31.333, Base Lr: 3.02e-04
+2026-09-21 14:48:32,665 transreid INFO: Epoch[26] Iteration[100/203] Loss: 32.802, Base Lr: 3.02e-04
+2026-09-21 14:48:45,508 transreid INFO: Epoch[26] Iteration[150/203] Loss: 33.891, Base Lr: 3.02e-04
+2026-09-21 14:48:58,533 transreid INFO: Epoch[26] Iteration[200/203] Loss: 34.701, Base Lr: 3.02e-04
+2026-09-21 14:48:59,180 transreid INFO: Epoch[26] done. Loss: 34.719 (i2t 8.714, t2i 25.228, above floor 34.719) per slot {'global': 4.234, 'head': 7.4, 'upper_arms_torso': 4.284, 'lower_arms_torso': 3.529, 'legs': 6.198, 'feet': 9.075} Base Lr: 3.02e-04
+2026-09-21 14:49:13,108 transreid INFO: Epoch[27] Iteration[50/203] Loss: 31.199, Base Lr: 2.90e-04
+2026-09-21 14:49:25,767 transreid INFO: Epoch[27] Iteration[100/203] Loss: 32.267, Base Lr: 2.90e-04
+2026-09-21 14:49:38,724 transreid INFO: Epoch[27] Iteration[150/203] Loss: 33.487, Base Lr: 2.90e-04
+2026-09-21 14:49:51,424 transreid INFO: Epoch[27] Iteration[200/203] Loss: 34.194, Base Lr: 2.90e-04
+2026-09-21 14:49:52,033 transreid INFO: Epoch[27] done. Loss: 34.249 (i2t 8.508, t2i 24.971, above floor 34.249) per slot {'global': 4.185, 'head': 7.307, 'upper_arms_torso': 4.2, 'lower_arms_torso': 3.458, 'legs': 6.127, 'feet': 8.975} Base Lr: 2.90e-04
+2026-09-21 14:50:05,990 transreid INFO: Epoch[28] Iteration[50/203] Loss: 30.726, Base Lr: 2.77e-04
+2026-09-21 14:50:18,865 transreid INFO: Epoch[28] Iteration[100/203] Loss: 31.887, Base Lr: 2.77e-04
+2026-09-21 14:50:31,566 transreid INFO: Epoch[28] Iteration[150/203] Loss: 33.084, Base Lr: 2.77e-04
+2026-09-21 14:50:44,391 transreid INFO: Epoch[28] Iteration[200/203] Loss: 33.769, Base Lr: 2.77e-04
+2026-09-21 14:50:45,033 transreid INFO: Epoch[28] done. Loss: 33.828 (i2t 8.317, t2i 24.737, above floor 33.828) per slot {'global': 4.112, 'head': 7.227, 'upper_arms_torso': 4.154, 'lower_arms_torso': 3.376, 'legs': 6.05, 'feet': 8.907} Base Lr: 2.77e-04
+2026-09-21 14:50:58,983 transreid INFO: Epoch[29] Iteration[50/203] Loss: 30.496, Base Lr: 2.64e-04
+2026-09-21 14:51:12,035 transreid INFO: Epoch[29] Iteration[100/203] Loss: 31.723, Base Lr: 2.64e-04
+2026-09-21 14:51:24,688 transreid INFO: Epoch[29] Iteration[150/203] Loss: 32.589, Base Lr: 2.64e-04
+2026-09-21 14:51:37,381 transreid INFO: Epoch[29] Iteration[200/203] Loss: 33.349, Base Lr: 2.64e-04
+2026-09-21 14:51:38,042 transreid INFO: Epoch[29] done. Loss: 33.402 (i2t 8.172, t2i 24.465, above floor 33.402) per slot {'global': 4.06, 'head': 7.12, 'upper_arms_torso': 4.067, 'lower_arms_torso': 3.31, 'legs': 6.009, 'feet': 8.839} Base Lr: 2.64e-04
+2026-09-21 14:51:52,201 transreid INFO: Epoch[30] Iteration[50/203] Loss: 29.716, Base Lr: 2.51e-04
+2026-09-21 14:52:04,828 transreid INFO: Epoch[30] Iteration[100/203] Loss: 31.040, Base Lr: 2.51e-04
+2026-09-21 14:52:17,486 transreid INFO: Epoch[30] Iteration[150/203] Loss: 32.007, Base Lr: 2.51e-04
+2026-09-21 14:52:30,434 transreid INFO: Epoch[30] Iteration[200/203] Loss: 32.945, Base Lr: 2.51e-04
+2026-09-21 14:52:31,091 transreid INFO: Epoch[30] done. Loss: 32.981 (i2t 7.929, t2i 24.285, above floor 32.981) per slot {'global': 4.008, 'head': 7.042, 'upper_arms_torso': 4.008, 'lower_arms_torso': 3.239, 'legs': 5.933, 'feet': 8.746} Base Lr: 2.51e-04
+2026-09-21 14:52:32,293 transreid INFO: Epoch[30] image->text top-1 per slot: {'global': 0.898, 'head': 0.697, 'upper_arms_torso': 0.845, 'lower_arms_torso': 0.902, 'legs': 0.741, 'feet': 0.593}
+2026-09-21 14:52:32,389 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_30.pth
+2026-09-21 14:52:46,223 transreid INFO: Epoch[31] Iteration[50/203] Loss: 29.560, Base Lr: 2.37e-04
+2026-09-21 14:52:58,903 transreid INFO: Epoch[31] Iteration[100/203] Loss: 30.748, Base Lr: 2.37e-04
+2026-09-21 14:53:11,810 transreid INFO: Epoch[31] Iteration[150/203] Loss: 31.594, Base Lr: 2.37e-04
+2026-09-21 14:53:24,688 transreid INFO: Epoch[31] Iteration[200/203] Loss: 32.442, Base Lr: 2.37e-04
+2026-09-21 14:53:25,342 transreid INFO: Epoch[31] done. Loss: 32.499 (i2t 7.738, t2i 24.010, above floor 32.499) per slot {'global': 3.938, 'head': 6.942, 'upper_arms_torso': 3.925, 'lower_arms_torso': 3.168, 'legs': 5.861, 'feet': 8.675} Base Lr: 2.37e-04
+2026-09-21 14:53:39,189 transreid INFO: Epoch[32] Iteration[50/203] Loss: 29.101, Base Lr: 2.24e-04
+2026-09-21 14:53:51,976 transreid INFO: Epoch[32] Iteration[100/203] Loss: 30.278, Base Lr: 2.24e-04
+2026-09-21 14:54:04,940 transreid INFO: Epoch[32] Iteration[150/203] Loss: 31.185, Base Lr: 2.24e-04
+2026-09-21 14:54:17,566 transreid INFO: Epoch[32] Iteration[200/203] Loss: 32.017, Base Lr: 2.24e-04
+2026-09-21 14:54:18,174 transreid INFO: Epoch[32] done. Loss: 32.048 (i2t 7.526, t2i 23.760, above floor 32.048) per slot {'global': 3.875, 'head': 6.829, 'upper_arms_torso': 3.866, 'lower_arms_torso': 3.093, 'legs': 5.789, 'feet': 8.587} Base Lr: 2.24e-04
+2026-09-21 14:54:32,098 transreid INFO: Epoch[33] Iteration[50/203] Loss: 28.820, Base Lr: 2.11e-04
+2026-09-21 14:54:45,073 transreid INFO: Epoch[33] Iteration[100/203] Loss: 29.782, Base Lr: 2.11e-04
+2026-09-21 14:54:57,854 transreid INFO: Epoch[33] Iteration[150/203] Loss: 30.787, Base Lr: 2.11e-04
+2026-09-21 14:55:10,467 transreid INFO: Epoch[33] Iteration[200/203] Loss: 31.595, Base Lr: 2.11e-04
+2026-09-21 14:55:11,108 transreid INFO: Epoch[33] done. Loss: 31.608 (i2t 7.369, t2i 23.492, above floor 31.608) per slot {'global': 3.819, 'head': 6.737, 'upper_arms_torso': 3.783, 'lower_arms_torso': 3.02, 'legs': 5.731, 'feet': 8.522} Base Lr: 2.11e-04
+2026-09-21 14:55:25,291 transreid INFO: Epoch[34] Iteration[50/203] Loss: 28.360, Base Lr: 1.99e-04
+2026-09-21 14:55:37,981 transreid INFO: Epoch[34] Iteration[100/203] Loss: 29.616, Base Lr: 1.99e-04
+2026-09-21 14:55:50,756 transreid INFO: Epoch[34] Iteration[150/203] Loss: 30.371, Base Lr: 1.99e-04
+2026-09-21 14:56:03,530 transreid INFO: Epoch[34] Iteration[200/203] Loss: 31.175, Base Lr: 1.99e-04
+2026-09-21 14:56:04,122 transreid INFO: Epoch[34] done. Loss: 31.214 (i2t 7.213, t2i 23.262, above floor 31.214) per slot {'global': 3.769, 'head': 6.64, 'upper_arms_torso': 3.732, 'lower_arms_torso': 2.971, 'legs': 5.669, 'feet': 8.437} Base Lr: 1.99e-04
+2026-09-21 14:56:18,319 transreid INFO: Epoch[35] Iteration[50/203] Loss: 27.717, Base Lr: 1.86e-04
+2026-09-21 14:56:31,082 transreid INFO: Epoch[35] Iteration[100/203] Loss: 28.886, Base Lr: 1.86e-04
+2026-09-21 14:56:43,821 transreid INFO: Epoch[35] Iteration[150/203] Loss: 29.942, Base Lr: 1.86e-04
+2026-09-21 14:56:56,776 transreid INFO: Epoch[35] Iteration[200/203] Loss: 30.719, Base Lr: 1.86e-04
+2026-09-21 14:56:57,413 transreid INFO: Epoch[35] done. Loss: 30.725 (i2t 6.987, t2i 23.000, above floor 30.725) per slot {'global': 3.703, 'head': 6.544, 'upper_arms_torso': 3.668, 'lower_arms_torso': 2.872, 'legs': 5.592, 'feet': 8.35} Base Lr: 1.86e-04
+2026-09-21 14:57:11,352 transreid INFO: Epoch[36] Iteration[50/203] Loss: 27.641, Base Lr: 1.73e-04
+2026-09-21 14:57:24,031 transreid INFO: Epoch[36] Iteration[100/203] Loss: 28.595, Base Lr: 1.73e-04
+2026-09-21 14:57:36,987 transreid INFO: Epoch[36] Iteration[150/203] Loss: 29.535, Base Lr: 1.73e-04
+2026-09-21 14:57:49,771 transreid INFO: Epoch[36] Iteration[200/203] Loss: 30.275, Base Lr: 1.73e-04
+2026-09-21 14:57:50,421 transreid INFO: Epoch[36] done. Loss: 30.310 (i2t 6.795, t2i 22.778, above floor 30.310) per slot {'global': 3.641, 'head': 6.458, 'upper_arms_torso': 3.609, 'lower_arms_torso': 2.827, 'legs': 5.508, 'feet': 8.266} Base Lr: 1.73e-04
+2026-09-21 14:58:04,243 transreid INFO: Epoch[37] Iteration[50/203] Loss: 27.373, Base Lr: 1.61e-04
+2026-09-21 14:58:16,946 transreid INFO: Epoch[37] Iteration[100/203] Loss: 28.179, Base Lr: 1.61e-04
+2026-09-21 14:58:30,016 transreid INFO: Epoch[37] Iteration[150/203] Loss: 29.075, Base Lr: 1.61e-04
+2026-09-21 14:58:42,683 transreid INFO: Epoch[37] Iteration[200/203] Loss: 29.885, Base Lr: 1.61e-04
+2026-09-21 14:58:43,318 transreid INFO: Epoch[37] done. Loss: 29.900 (i2t 6.645, t2i 22.532, above floor 29.900) per slot {'global': 3.588, 'head': 6.348, 'upper_arms_torso': 3.545, 'lower_arms_torso': 2.77, 'legs': 5.469, 'feet': 8.183} Base Lr: 1.61e-04
+2026-09-21 14:58:57,221 transreid INFO: Epoch[38] Iteration[50/203] Loss: 26.680, Base Lr: 1.49e-04
+2026-09-21 14:59:10,258 transreid INFO: Epoch[38] Iteration[100/203] Loss: 27.541, Base Lr: 1.49e-04
+2026-09-21 14:59:22,973 transreid INFO: Epoch[38] Iteration[150/203] Loss: 28.682, Base Lr: 1.49e-04
+2026-09-21 14:59:35,622 transreid INFO: Epoch[38] Iteration[200/203] Loss: 29.426, Base Lr: 1.49e-04
+2026-09-21 14:59:36,238 transreid INFO: Epoch[38] done. Loss: 29.460 (i2t 6.443, t2i 22.295, above floor 29.460) per slot {'global': 3.524, 'head': 6.252, 'upper_arms_torso': 3.466, 'lower_arms_torso': 2.697, 'legs': 5.403, 'feet': 8.12} Base Lr: 1.49e-04
+2026-09-21 14:59:50,450 transreid INFO: Epoch[39] Iteration[50/203] Loss: 26.700, Base Lr: 1.37e-04
+2026-09-21 15:00:03,122 transreid INFO: Epoch[39] Iteration[100/203] Loss: 27.547, Base Lr: 1.37e-04
+2026-09-21 15:00:15,881 transreid INFO: Epoch[39] Iteration[150/203] Loss: 28.390, Base Lr: 1.37e-04
+2026-09-21 15:00:28,846 transreid INFO: Epoch[39] Iteration[200/203] Loss: 28.936, Base Lr: 1.37e-04
+2026-09-21 15:00:29,282 transreid INFO: Epoch[39] done. Loss: 28.987 (i2t 6.278, t2i 21.987, above floor 28.987) per slot {'global': 3.454, 'head': 6.146, 'upper_arms_torso': 3.408, 'lower_arms_torso': 2.644, 'legs': 5.307, 'feet': 8.024} Base Lr: 1.37e-04
+2026-09-21 15:00:43,342 transreid INFO: Epoch[40] Iteration[50/203] Loss: 26.388, Base Lr: 1.26e-04
+2026-09-21 15:00:55,951 transreid INFO: Epoch[40] Iteration[100/203] Loss: 27.055, Base Lr: 1.26e-04
+2026-09-21 15:01:08,561 transreid INFO: Epoch[40] Iteration[150/203] Loss: 27.805, Base Lr: 1.26e-04
+2026-09-21 15:01:21,469 transreid INFO: Epoch[40] Iteration[200/203] Loss: 28.529, Base Lr: 1.26e-04
+2026-09-21 15:01:22,093 transreid INFO: Epoch[40] done. Loss: 28.546 (i2t 6.113, t2i 21.723, above floor 28.546) per slot {'global': 3.395, 'head': 6.047, 'upper_arms_torso': 3.347, 'lower_arms_torso': 2.583, 'legs': 5.235, 'feet': 7.941} Base Lr: 1.26e-04
+2026-09-21 15:01:23,297 transreid INFO: Epoch[40] image->text top-1 per slot: {'global': 0.938, 'head': 0.772, 'upper_arms_torso': 0.89, 'lower_arms_torso': 0.941, 'legs': 0.803, 'feet': 0.648}
+2026-09-21 15:01:23,391 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_40.pth
+2026-09-21 15:01:37,218 transreid INFO: Epoch[41] Iteration[50/203] Loss: 25.764, Base Lr: 1.15e-04
+2026-09-21 15:01:49,868 transreid INFO: Epoch[41] Iteration[100/203] Loss: 26.726, Base Lr: 1.15e-04
+2026-09-21 15:02:02,952 transreid INFO: Epoch[41] Iteration[150/203] Loss: 27.457, Base Lr: 1.15e-04
+2026-09-21 15:02:15,673 transreid INFO: Epoch[41] Iteration[200/203] Loss: 28.107, Base Lr: 1.15e-04
+2026-09-21 15:02:16,313 transreid INFO: Epoch[41] done. Loss: 28.147 (i2t 5.945, t2i 21.499, above floor 28.147) per slot {'global': 3.329, 'head': 5.961, 'upper_arms_torso': 3.279, 'lower_arms_torso': 2.53, 'legs': 5.185, 'feet': 7.867} Base Lr: 1.15e-04
+2026-09-21 15:02:30,203 transreid INFO: Epoch[42] Iteration[50/203] Loss: 25.506, Base Lr: 1.04e-04
+2026-09-21 15:02:43,012 transreid INFO: Epoch[42] Iteration[100/203] Loss: 26.514, Base Lr: 1.04e-04
+2026-09-21 15:02:55,888 transreid INFO: Epoch[42] Iteration[150/203] Loss: 27.024, Base Lr: 1.04e-04
+2026-09-21 15:03:08,647 transreid INFO: Epoch[42] Iteration[200/203] Loss: 27.650, Base Lr: 1.04e-04
+2026-09-21 15:03:09,272 transreid INFO: Epoch[42] done. Loss: 27.685 (i2t 5.770, t2i 21.209, above floor 27.685) per slot {'global': 3.268, 'head': 5.865, 'upper_arms_torso': 3.22, 'lower_arms_torso': 2.452, 'legs': 5.103, 'feet': 7.774} Base Lr: 1.04e-04
+2026-09-21 15:03:23,268 transreid INFO: Epoch[43] Iteration[50/203] Loss: 25.456, Base Lr: 9.35e-05
+2026-09-21 15:03:36,273 transreid INFO: Epoch[43] Iteration[100/203] Loss: 26.273, Base Lr: 9.35e-05
+2026-09-21 15:03:49,064 transreid INFO: Epoch[43] Iteration[150/203] Loss: 26.873, Base Lr: 9.35e-05
+2026-09-21 15:04:01,705 transreid INFO: Epoch[43] Iteration[200/203] Loss: 27.359, Base Lr: 9.35e-05
+2026-09-21 15:04:02,355 transreid INFO: Epoch[43] done. Loss: 27.327 (i2t 5.631, t2i 21.003, above floor 27.327) per slot {'global': 3.219, 'head': 5.786, 'upper_arms_torso': 3.168, 'lower_arms_torso': 2.409, 'legs': 5.041, 'feet': 7.709} Base Lr: 9.35e-05
+2026-09-21 15:04:16,626 transreid INFO: Epoch[44] Iteration[50/203] Loss: 24.903, Base Lr: 8.36e-05
+2026-09-21 15:04:29,394 transreid INFO: Epoch[44] Iteration[100/203] Loss: 25.822, Base Lr: 8.36e-05
+2026-09-21 15:04:42,180 transreid INFO: Epoch[44] Iteration[150/203] Loss: 26.446, Base Lr: 8.36e-05
+2026-09-21 15:04:55,205 transreid INFO: Epoch[44] Iteration[200/203] Loss: 26.878, Base Lr: 8.36e-05
+2026-09-21 15:04:55,620 transreid INFO: Epoch[44] done. Loss: 26.911 (i2t 5.478, t2i 20.746, above floor 26.911) per slot {'global': 3.163, 'head': 5.695, 'upper_arms_torso': 3.105, 'lower_arms_torso': 2.346, 'legs': 4.979, 'feet': 7.629} Base Lr: 8.36e-05
+2026-09-21 15:05:09,769 transreid INFO: Epoch[45] Iteration[50/203] Loss: 25.068, Base Lr: 7.41e-05
+2026-09-21 15:05:22,433 transreid INFO: Epoch[45] Iteration[100/203] Loss: 25.535, Base Lr: 7.41e-05
+2026-09-21 15:05:35,078 transreid INFO: Epoch[45] Iteration[150/203] Loss: 26.038, Base Lr: 7.41e-05
+2026-09-21 15:05:48,041 transreid INFO: Epoch[45] Iteration[200/203] Loss: 26.500, Base Lr: 7.41e-05
+2026-09-21 15:05:48,678 transreid INFO: Epoch[45] done. Loss: 26.502 (i2t 5.313, t2i 20.498, above floor 26.502) per slot {'global': 3.105, 'head': 5.603, 'upper_arms_torso': 3.044, 'lower_arms_torso': 2.292, 'legs': 4.907, 'feet': 7.548} Base Lr: 7.41e-05
+2026-09-21 15:06:02,548 transreid INFO: Epoch[46] Iteration[50/203] Loss: 25.088, Base Lr: 6.51e-05
+2026-09-21 15:06:15,328 transreid INFO: Epoch[46] Iteration[100/203] Loss: 25.449, Base Lr: 6.51e-05
+2026-09-21 15:06:28,377 transreid INFO: Epoch[46] Iteration[150/203] Loss: 25.890, Base Lr: 6.51e-05
+2026-09-21 15:06:41,144 transreid INFO: Epoch[46] Iteration[200/203] Loss: 26.107, Base Lr: 6.51e-05
+2026-09-21 15:06:41,792 transreid INFO: Epoch[46] done. Loss: 26.116 (i2t 5.185, t2i 20.245, above floor 26.116) per slot {'global': 3.05, 'head': 5.512, 'upper_arms_torso': 3.0, 'lower_arms_torso': 2.24, 'legs': 4.842, 'feet': 7.467} Base Lr: 6.51e-05
+2026-09-21 15:06:55,684 transreid INFO: Epoch[47] Iteration[50/203] Loss: 24.070, Base Lr: 5.66e-05
+2026-09-21 15:07:08,499 transreid INFO: Epoch[47] Iteration[100/203] Loss: 24.912, Base Lr: 5.66e-05
+2026-09-21 15:07:21,435 transreid INFO: Epoch[47] Iteration[150/203] Loss: 25.355, Base Lr: 5.66e-05
+2026-09-21 15:07:34,159 transreid INFO: Epoch[47] Iteration[200/203] Loss: 25.736, Base Lr: 5.66e-05
+2026-09-21 15:07:34,820 transreid INFO: Epoch[47] done. Loss: 25.766 (i2t 5.059, t2i 20.034, above floor 25.766) per slot {'global': 2.998, 'head': 5.442, 'upper_arms_torso': 2.956, 'lower_arms_torso': 2.195, 'legs': 4.781, 'feet': 7.399} Base Lr: 5.66e-05
+2026-09-21 15:07:48,882 transreid INFO: Epoch[48] Iteration[50/203] Loss: 24.470, Base Lr: 4.87e-05
+2026-09-21 15:08:01,823 transreid INFO: Epoch[48] Iteration[100/203] Loss: 24.579, Base Lr: 4.87e-05
+2026-09-21 15:08:14,510 transreid INFO: Epoch[48] Iteration[150/203] Loss: 25.049, Base Lr: 4.87e-05
+2026-09-21 15:08:27,078 transreid INFO: Epoch[48] Iteration[200/203] Loss: 25.428, Base Lr: 4.87e-05
+2026-09-21 15:08:27,702 transreid INFO: Epoch[48] done. Loss: 25.425 (i2t 4.925, t2i 19.826, above floor 25.425) per slot {'global': 2.951, 'head': 5.366, 'upper_arms_torso': 2.906, 'lower_arms_torso': 2.156, 'legs': 4.722, 'feet': 7.322} Base Lr: 4.87e-05
+2026-09-21 15:08:41,813 transreid INFO: Epoch[49] Iteration[50/203] Loss: 23.992, Base Lr: 4.13e-05
+2026-09-21 15:08:54,597 transreid INFO: Epoch[49] Iteration[100/203] Loss: 24.285, Base Lr: 4.13e-05
+2026-09-21 15:09:07,330 transreid INFO: Epoch[49] Iteration[150/203] Loss: 24.739, Base Lr: 4.13e-05
+2026-09-21 15:09:20,224 transreid INFO: Epoch[49] Iteration[200/203] Loss: 25.101, Base Lr: 4.13e-05
+2026-09-21 15:09:20,873 transreid INFO: Epoch[49] done. Loss: 25.105 (i2t 4.813, t2i 19.625, above floor 25.105) per slot {'global': 2.909, 'head': 5.3, 'upper_arms_torso': 2.86, 'lower_arms_torso': 2.116, 'legs': 4.664, 'feet': 7.256} Base Lr: 4.13e-05
+2026-09-21 15:09:34,877 transreid INFO: Epoch[50] Iteration[50/203] Loss: 23.714, Base Lr: 3.44e-05
+2026-09-21 15:09:48,437 transreid INFO: Epoch[50] Iteration[100/203] Loss: 24.017, Base Lr: 3.44e-05
+2026-09-21 15:09:58,210 transreid INFO: Epoch[50] Iteration[150/203] Loss: 24.410, Base Lr: 3.44e-05
+2026-09-21 15:10:05,528 transreid INFO: Epoch[50] Iteration[200/203] Loss: 24.740, Base Lr: 3.44e-05
+2026-09-21 15:10:05,884 transreid INFO: Epoch[50] done. Loss: 24.768 (i2t 4.699, t2i 19.411, above floor 24.768) per slot {'global': 2.865, 'head': 5.228, 'upper_arms_torso': 2.81, 'lower_arms_torso': 2.073, 'legs': 4.605, 'feet': 7.192} Base Lr: 3.44e-05
+2026-09-21 15:10:06,631 transreid INFO: Epoch[50] image->text top-1 per slot: {'global': 0.956, 'head': 0.81, 'upper_arms_torso': 0.908, 'lower_arms_torso': 0.957, 'legs': 0.837, 'feet': 0.679}
+2026-09-21 15:10:06,725 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_50.pth
+2026-09-21 15:10:14,719 transreid INFO: Epoch[51] Iteration[50/203] Loss: 23.412, Base Lr: 2.82e-05
+2026-09-21 15:10:21,991 transreid INFO: Epoch[51] Iteration[100/203] Loss: 23.850, Base Lr: 2.82e-05
+2026-09-21 15:10:29,226 transreid INFO: Epoch[51] Iteration[150/203] Loss: 24.037, Base Lr: 2.82e-05
+2026-09-21 15:10:36,437 transreid INFO: Epoch[51] Iteration[200/203] Loss: 24.489, Base Lr: 2.82e-05
+2026-09-21 15:10:36,794 transreid INFO: Epoch[51] done. Loss: 24.512 (i2t 4.613, t2i 19.237, above floor 24.512) per slot {'global': 2.827, 'head': 5.169, 'upper_arms_torso': 2.779, 'lower_arms_torso': 2.043, 'legs': 4.56, 'feet': 7.129} Base Lr: 2.82e-05
+2026-09-21 15:10:44,785 transreid INFO: Epoch[52] Iteration[50/203] Loss: 24.168, Base Lr: 2.26e-05
+2026-09-21 15:10:52,020 transreid INFO: Epoch[52] Iteration[100/203] Loss: 23.974, Base Lr: 2.26e-05
+2026-09-21 15:10:59,228 transreid INFO: Epoch[52] Iteration[150/203] Loss: 24.161, Base Lr: 2.26e-05
+2026-09-21 15:11:06,510 transreid INFO: Epoch[52] Iteration[200/203] Loss: 24.242, Base Lr: 2.26e-05
+2026-09-21 15:11:06,862 transreid INFO: Epoch[52] done. Loss: 24.246 (i2t 4.511, t2i 19.083, above floor 24.246) per slot {'global': 2.794, 'head': 5.116, 'upper_arms_torso': 2.747, 'lower_arms_torso': 2.01, 'legs': 4.508, 'feet': 7.074} Base Lr: 2.26e-05
+2026-09-21 15:11:14,753 transreid INFO: Epoch[53] Iteration[50/203] Loss: 23.829, Base Lr: 1.76e-05
+2026-09-21 15:11:22,000 transreid INFO: Epoch[53] Iteration[100/203] Loss: 23.712, Base Lr: 1.76e-05
+2026-09-21 15:11:29,235 transreid INFO: Epoch[53] Iteration[150/203] Loss: 23.908, Base Lr: 1.76e-05
+2026-09-21 15:11:36,406 transreid INFO: Epoch[53] Iteration[200/203] Loss: 24.020, Base Lr: 1.76e-05
+2026-09-21 15:11:36,760 transreid INFO: Epoch[53] done. Loss: 24.028 (i2t 4.438, t2i 18.941, above floor 24.028) per slot {'global': 2.768, 'head': 5.068, 'upper_arms_torso': 2.718, 'lower_arms_torso': 1.986, 'legs': 4.467, 'feet': 7.024} Base Lr: 1.76e-05
+2026-09-21 15:11:44,722 transreid INFO: Epoch[54] Iteration[50/203] Loss: 23.343, Base Lr: 1.32e-05
+2026-09-21 15:11:51,907 transreid INFO: Epoch[54] Iteration[100/203] Loss: 23.554, Base Lr: 1.32e-05
+2026-09-21 15:11:59,113 transreid INFO: Epoch[54] Iteration[150/203] Loss: 23.761, Base Lr: 1.32e-05
+2026-09-21 15:12:06,322 transreid INFO: Epoch[54] Iteration[200/203] Loss: 23.830, Base Lr: 1.32e-05
+2026-09-21 15:12:06,676 transreid INFO: Epoch[54] done. Loss: 23.828 (i2t 4.363, t2i 18.816, above floor 23.828) per slot {'global': 2.739, 'head': 5.025, 'upper_arms_torso': 2.692, 'lower_arms_torso': 1.963, 'legs': 4.43, 'feet': 6.976} Base Lr: 1.32e-05
+2026-09-21 15:12:14,658 transreid INFO: Epoch[55] Iteration[50/203] Loss: 23.381, Base Lr: 9.50e-06
+2026-09-21 15:12:21,873 transreid INFO: Epoch[55] Iteration[100/203] Loss: 23.503, Base Lr: 9.50e-06
+2026-09-21 15:12:29,154 transreid INFO: Epoch[55] Iteration[150/203] Loss: 23.527, Base Lr: 9.50e-06
+2026-09-21 15:12:36,354 transreid INFO: Epoch[55] Iteration[200/203] Loss: 23.650, Base Lr: 9.50e-06
+2026-09-21 15:12:36,705 transreid INFO: Epoch[55] done. Loss: 23.651 (i2t 4.306, t2i 18.701, above floor 23.651) per slot {'global': 2.716, 'head': 4.987, 'upper_arms_torso': 2.669, 'lower_arms_torso': 1.944, 'legs': 4.398, 'feet': 6.939} Base Lr: 9.50e-06
+2026-09-21 15:12:44,658 transreid INFO: Epoch[56] Iteration[50/203] Loss: 23.609, Base Lr: 6.45e-06
+2026-09-21 15:12:51,866 transreid INFO: Epoch[56] Iteration[100/203] Loss: 23.360, Base Lr: 6.45e-06
+2026-09-21 15:12:59,110 transreid INFO: Epoch[56] Iteration[150/203] Loss: 23.345, Base Lr: 6.45e-06
+2026-09-21 15:13:06,345 transreid INFO: Epoch[56] Iteration[200/203] Loss: 23.536, Base Lr: 6.45e-06
+2026-09-21 15:13:06,701 transreid INFO: Epoch[56] done. Loss: 23.505 (i2t 4.261, t2i 18.606, above floor 23.505) per slot {'global': 2.695, 'head': 4.955, 'upper_arms_torso': 2.652, 'lower_arms_torso': 1.926, 'legs': 4.373, 'feet': 6.909} Base Lr: 6.45e-06
+2026-09-21 15:13:14,704 transreid INFO: Epoch[57] Iteration[50/203] Loss: 23.261, Base Lr: 4.07e-06
+2026-09-21 15:13:21,921 transreid INFO: Epoch[57] Iteration[100/203] Loss: 23.357, Base Lr: 4.07e-06
+2026-09-21 15:13:29,170 transreid INFO: Epoch[57] Iteration[150/203] Loss: 23.466, Base Lr: 4.07e-06
+2026-09-21 15:13:36,371 transreid INFO: Epoch[57] Iteration[200/203] Loss: 23.442, Base Lr: 4.07e-06
+2026-09-21 15:13:36,723 transreid INFO: Epoch[57] done. Loss: 23.416 (i2t 4.226, t2i 18.548, above floor 23.416) per slot {'global': 2.682, 'head': 4.937, 'upper_arms_torso': 2.638, 'lower_arms_torso': 1.918, 'legs': 4.353, 'feet': 6.887} Base Lr: 4.07e-06
+2026-09-21 15:13:44,680 transreid INFO: Epoch[58] Iteration[50/203] Loss: 23.401, Base Lr: 2.37e-06
+2026-09-21 15:13:51,900 transreid INFO: Epoch[58] Iteration[100/203] Loss: 23.581, Base Lr: 2.37e-06
+2026-09-21 15:13:59,166 transreid INFO: Epoch[58] Iteration[150/203] Loss: 23.373, Base Lr: 2.37e-06
+2026-09-21 15:14:06,444 transreid INFO: Epoch[58] Iteration[200/203] Loss: 23.304, Base Lr: 2.37e-06
+2026-09-21 15:14:06,805 transreid INFO: Epoch[58] done. Loss: 23.323 (i2t 4.200, t2i 18.481, above floor 23.323) per slot {'global': 2.67, 'head': 4.92, 'upper_arms_torso': 2.623, 'lower_arms_torso': 1.904, 'legs': 4.336, 'feet': 6.867} Base Lr: 2.37e-06
+2026-09-21 15:14:14,802 transreid INFO: Epoch[59] Iteration[50/203] Loss: 23.516, Base Lr: 1.34e-06
+2026-09-21 15:14:22,040 transreid INFO: Epoch[59] Iteration[100/203] Loss: 23.189, Base Lr: 1.34e-06
+2026-09-21 15:14:29,323 transreid INFO: Epoch[59] Iteration[150/203] Loss: 23.189, Base Lr: 1.34e-06
+2026-09-21 15:14:36,532 transreid INFO: Epoch[59] Iteration[200/203] Loss: 23.270, Base Lr: 1.34e-06
+2026-09-21 15:14:36,885 transreid INFO: Epoch[59] done. Loss: 23.277 (i2t 4.185, t2i 18.459, above floor 23.277) per slot {'global': 2.666, 'head': 4.91, 'upper_arms_torso': 2.617, 'lower_arms_torso': 1.9, 'legs': 4.332, 'feet': 6.857} Base Lr: 1.34e-06
+2026-09-21 15:14:44,894 transreid INFO: Epoch[60] Iteration[50/203] Loss: 23.457, Base Lr: 1.00e-06
+2026-09-21 15:14:52,139 transreid INFO: Epoch[60] Iteration[100/203] Loss: 23.203, Base Lr: 1.00e-06
+2026-09-21 15:14:59,392 transreid INFO: Epoch[60] Iteration[150/203] Loss: 23.389, Base Lr: 1.00e-06
+2026-09-21 15:15:06,650 transreid INFO: Epoch[60] Iteration[200/203] Loss: 23.260, Base Lr: 1.00e-06
+2026-09-21 15:15:07,001 transreid INFO: Epoch[60] done. Loss: 23.256 (i2t 4.179, t2i 18.439, above floor 23.256) per slot {'global': 2.662, 'head': 4.906, 'upper_arms_torso': 2.617, 'lower_arms_torso': 1.897, 'legs': 4.323, 'feet': 6.851} Base Lr: 1.00e-06
+2026-09-21 15:15:07,748 transreid INFO: Epoch[60] image->text top-1 per slot: {'global': 0.958, 'head': 0.816, 'upper_arms_torso': 0.912, 'lower_arms_torso': 0.962, 'legs': 0.845, 'feet': 0.682}
+2026-09-21 15:15:07,832 transreid INFO: saved ./work_dirs/market1501/part_prompts_stage1/RN50_part_prompts_stage1_60.pth
+2026-09-21 15:15:07,833 transreid INFO: Stage1 running time: 0:50:00.747184
