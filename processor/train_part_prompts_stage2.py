@@ -49,7 +49,7 @@ from torch.cuda import amp
 from processor.train_part_prompts_stage1 import (PartPromptLearner, encode_text, supcon, pifpaf_to_masks,
                                                   PART_NAMES, K, S, SLOT_NAMES)
 from model.make_model_clipreid import load_clip_to_cpu, TextEncoder, weights_init_kaiming, weights_init_classifier
-from datasets.part_datasets import DATASETS, build_dataset, mask_path, resolve_masks
+from datasets.part_datasets import DATASETS, MASK_SUFFIX, build_dataset, mask_path, resolve_masks
 from datasets.sampler import RandomIdentitySampler
 from datasets.bases import ImageDataset, read_image
 from datasets.make_dataloader_clipreid import val_collate_fn
@@ -66,6 +66,8 @@ DATA_ROOT = '../../datasets'
 DATASET = 'market1501'             # market1501 | msmt17 | dukemtmc (datasets/part_datasets.py); --dataset overrides,
                                    # and it must match the dataset the stage-1 prompts were learnt on. Train-split
                                    # PifPaf masks are resolved from the name (see stage 1); query/gallery need none.
+MASKS_VARIANT = 'pifpaf_maskrcnn_filtering'    # pre-saved BPBreID mask set to read; 'pifpaf' is the unfiltered one
+MASKS_DIR = None                   # None = <dataset_dir>/masks/<MASKS_VARIANT>; --masks-dir points elsewhere
 OUTPUT_DIR = './work_dirs/{dataset}/part_prompts_stage2'
 STAGE1_CKPT = './work_dirs/{dataset}/part_prompts_stage1/RN50_part_prompts_stage1_60.pth'
 
@@ -146,9 +148,9 @@ class PartImageDataset(Dataset):
     erased regions become background in the mask (BPBreID mask_fill_value=0 -> argmax = background).
     """
 
-    def __init__(self, dataset, dataset_dir, masks_dir):
+    def __init__(self, dataset, dataset_dir, masks_dir, variant=None):
         self.dataset = dataset
-        self.dataset_dir, self.masks_dir = dataset_dir, masks_dir
+        self.dataset_dir, self.masks_dir, self.variant = dataset_dir, masks_dir, variant or MASKS_VARIANT
         self.normalize = T.Normalize(PIXEL_MEAN, PIXEL_STD)
 
     def __len__(self):
@@ -176,7 +178,7 @@ class PartImageDataset(Dataset):
     def __getitem__(self, index):
         img_path, pid, camid, _ = self.dataset[index]
         img = TF.to_tensor(TF.resize(read_image(img_path), [H, W], interpolation=T.InterpolationMode.BICUBIC))
-        mask = pifpaf_to_masks(np.load(mask_path(img_path, self.dataset_dir, self.masks_dir)))
+        mask = pifpaf_to_masks(np.load(mask_path(img_path, self.dataset_dir, self.masks_dir, self.variant)))
         mask = F.interpolate(mask[None], (H, W), mode='bilinear', align_corners=True)[0]
         if random.random() < FLIP_PROB:
             img, mask = img.flip(-1), mask.flip(-1)
@@ -193,7 +195,7 @@ class PartImageDataset(Dataset):
 
 
 def make_loaders(dataset, dataset_dir, masks_dir, batch):
-    train_set = PartImageDataset(dataset.train, dataset_dir, masks_dir)
+    train_set = PartImageDataset(dataset.train, dataset_dir, masks_dir, MASKS_VARIANT)
     train_loader = DataLoader(train_set, batch_size=batch,
                               sampler=RandomIdentitySampler(dataset.train, batch, NUM_INSTANCE),
                               num_workers=NUM_WORKERS, drop_last=True)
@@ -787,10 +789,13 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
 
 def main():
     global MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD, TEXT_ERASE_PROB, TEXT_DROPOUT, DATASET, OUTPUT_DIR
+    global MASKS_VARIANT, MASKS_DIR
     global RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2, RERANK_LAMBDA, RERANK_LOCAL_W
     global RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE
     parser = argparse.ArgumentParser(description='CLIP-ReID stage 2 with per-part prompts (RN50)')
     parser.add_argument('--dataset', choices=list(DATASETS), default=DATASET)
+    parser.add_argument('--masks-variant', choices=list(MASK_SUFFIX), default=MASKS_VARIANT)
+    parser.add_argument('--masks-dir', type=str, default=MASKS_DIR, help='pre-saved masks outside the dataset dir')
     parser.add_argument('--stage1-ckpt', type=str, default='')
     parser.add_argument('--epochs', type=int, default=MAX_EPOCHS)
     parser.add_argument('--batch', type=int, default=IMS_PER_BATCH)
@@ -815,6 +820,7 @@ def main():
     MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD, DATASET = args.epochs, args.batch, args.eval_period, args.dataset
     OUTPUT_DIR = OUTPUT_DIR.format(dataset=DATASET)
     args.stage1_ckpt = args.stage1_ckpt or STAGE1_CKPT.format(dataset=DATASET)
+    MASKS_VARIANT, MASKS_DIR = args.masks_variant, args.masks_dir
     TEXT_ERASE_PROB, TEXT_DROPOUT = args.text_erase_prob, args.text_dropout
     RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2 = args.rerank, args.rerank_feature, args.rerank_k1, args.rerank_k2
     RERANK_LAMBDA, RERANK_LOCAL_W = args.rerank_lambda, args.rerank_local_w
@@ -825,7 +831,7 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     logger = setup_logger('transreid', OUTPUT_DIR, if_train=not args.eval_only)
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
-        DATASET=DATASET, H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
+        DATASET=DATASET, MASKS_VARIANT=MASKS_VARIANT, MASKS_DIR=MASKS_DIR, H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
         STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, LPIM_ID_W=LPIM_ID_W, LPIM_TRI_W=LPIM_TRI_W, PART_TRI_W=PART_TRI_W,
         SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, TEXT_ERASE_PROB=TEXT_ERASE_PROB, TEXT_DROPOUT=TEXT_DROPOUT, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
         MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
@@ -835,7 +841,8 @@ def main():
         RERANK_EVERY_EVAL=RERANK_EVERY_EVAL).items()))
 
     dataset, dataset_dir = build_dataset(DATASET, DATA_ROOT)
-    masks_dir = resolve_masks(DATASET, dataset, dataset_dir, logger.info, require=not args.eval_only)
+    masks_dir = resolve_masks(DATASET, dataset, dataset_dir, logger.info, require=not args.eval_only,
+                              variant=MASKS_VARIANT, masks=MASKS_DIR)
     num_classes, num_query = dataset.num_train_pids, len(dataset.query)
     train_loader, val_loader = make_loaders(dataset, dataset_dir, masks_dir, IMS_PER_BATCH)
 

@@ -25,6 +25,10 @@ from .msmt17 import MSMT17
 from .dukemtmcreid import DukeMTMCreID
 
 MASKS_VARIANT = 'pifpaf_maskrcnn_filtering'        # BPBreID masks_dir name; 'pifpaf' is the unfiltered variant
+MASK_SUFFIX = {                                    # bpbreid masks_dirs: (36 channels, no background, suffix)
+    'pifpaf_maskrcnn_filtering': '.npy',           # PifPaf fields x the Mask R-CNN person silhouette
+    'pifpaf': '.jpg.confidence_fields.npy',        # raw PifPaf fields, no person filtering
+}
 
 
 class MSMT17V2(MSMT17):
@@ -88,27 +92,32 @@ def masks_root(dataset_dir, variant=MASKS_VARIANT):
 
 
 def mask_path(img_path, dataset_dir, masks=None, variant=MASKS_VARIANT):
-    """Mask of one image: the image's path relative to dataset_dir, under masks_root, with a .npy suffix."""
+    """Mask of one image: its path relative to dataset_dir, under the mask root, with the variant's suffix
+    (bpbreid infer_masks_path: the image extension is dropped and the suffix appended, so the unfiltered
+    variant's name carries its own '.jpg')."""
     rel = osp.relpath(osp.abspath(img_path), osp.abspath(dataset_dir))
-    return osp.join(masks or masks_root(dataset_dir, variant), osp.splitext(rel)[0] + '.npy')
+    return osp.join(masks or masks_root(dataset_dir, variant), osp.splitext(rel)[0] + MASK_SUFFIX[variant])
 
 
-def resolve_masks(name, dataset, dataset_dir, logger=print, require=True, paths=None):
+def resolve_masks(name, dataset, dataset_dir, logger=print, require=True, paths=None,
+                  variant=MASKS_VARIANT, masks=None):
     """Log the resolved mask directory and how complete it is; returns it whether or not it exists.
 
-    `paths` limits the completeness check to the images that will actually be read (stage 1 with --num-ids uses a
-    few identities, and those may be the only ones generated so far); the default is the whole train split.
-    Missing masks are not fixed here: the variable points at the expected location inside the dataset directory,
-    which is the path `reid_masks/compute_masks.py --dataset <dataset_dir>` fills.
+    `masks` overrides the location for a mask set kept outside the dataset directory (a downloaded release on
+    another disk, say); `variant` picks which BPBreID mask set to read. `paths` limits the completeness check to
+    the images that will actually be read (stage 1 with --num-ids uses a few identities, and those may be the only
+    ones generated so far); the default is the whole train split. Missing masks are not fixed here: the variable
+    points at the expected location, which is what `reid_masks/compute_masks.py --dataset <dataset_dir>` fills.
     """
-    masks = masks_root(dataset_dir)
+    masks = masks or masks_root(dataset_dir, variant)
     wanted = list(paths) if paths is not None else [item[0] for item in dataset.train]
-    missing = [p for p in wanted if not osp.exists(mask_path(p, dataset_dir, masks))]
+    missing = [p for p in wanted if not osp.exists(mask_path(p, dataset_dir, masks, variant))]
     logger(f'{name}: images {dataset_dir}, masks {masks} ({len(wanted) - len(missing)}/{len(wanted)} present)')
     if missing:
         message = (f'{name}: {len(missing)} masks missing under {osp.join(masks, DATASETS[name]["train"])}, '
-                   f'e.g. {mask_path(missing[0], dataset_dir, masks)} - generate them with '
-                   f'`python compute_masks.py --dataset {dataset_dir}` in ../reid_masks')
+                   f'e.g. {mask_path(missing[0], dataset_dir, masks, variant)} - generate them with '
+                   f'`python compute_masks.py --dataset {dataset_dir} --splits {DATASETS[name]["train"]}` '
+                   f'in ../reid_masks, or point --masks-dir at a pre-saved set')
         if require:
             raise FileNotFoundError(message)
         logger(message)

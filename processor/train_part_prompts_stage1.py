@@ -37,7 +37,7 @@ from model.make_model_clipreid import load_clip_to_cpu, TextEncoder
 from model.clip.clip import tokenize
 from loss.supcontrast import SupConLoss
 from solver.scheduler_factory import create_scheduler
-from datasets.part_datasets import DATASETS, build_dataset, mask_path, resolve_masks
+from datasets.part_datasets import DATASETS, MASK_SUFFIX, build_dataset, mask_path, resolve_masks
 from utils.logger import setup_logger
 from utils.meter import AverageMeter
 
@@ -48,6 +48,9 @@ DATASET = 'market1501'             # market1501 | msmt17 | dukemtmc (datasets/pa
                                    # live at <dataset_dir>/masks/pifpaf_maskrcnn_filtering/<image path relative to
                                    # <dataset_dir>>.npy. Only Market-1501 ships them; for the others that path is
                                    # where reid_masks/compute_masks.py writes.
+MASKS_VARIANT = 'pifpaf_maskrcnn_filtering'    # pre-saved BPBreID mask set to read; 'pifpaf' is the unfiltered one
+MASKS_DIR = None                   # None = <dataset_dir>/masks/<MASKS_VARIANT>; set (or --masks-dir) for a mask set
+                                   # kept outside the dataset directory
 OUTPUT_DIR = './work_dirs/{dataset}/part_prompts_stage1'
 
 BACKBONE = 'RN50'
@@ -379,7 +382,8 @@ class TextAttentionBlock(nn.Module):
 
 
 # ----------------------------------------------------------------------------- data
-def load_dataset(dataset_name=None, root=DATA_ROOT, num_ids=None, logger=print):
+def load_dataset(dataset_name=None, root=DATA_ROOT, num_ids=None, logger=print,
+                 variant=None, masks=None):
     """Train split of the dataset with its PifPaf masks, both resolved by datasets/part_datasets.py.
     Returns image paths, relabelled ids [N], masks [N, K+1, h, w] (the grid is whatever the .npy files hold;
     every consumer interpolates, so Market's 17x9 and a 33x17 MSMT17 grid both work - but one dataset's masks
@@ -391,9 +395,11 @@ def load_dataset(dataset_name=None, root=DATA_ROOT, num_ids=None, logger=print):
     pid2label = {pid: i for i, pid in enumerate(keep)}
     items = [it for it in dataset.train if it[1] in pid2label]
     paths = [it[0] for it in items]
-    masks_dir = resolve_masks(dataset_name or DATASET, dataset, dataset_dir, logger, paths=paths)
+    variant, masks = variant or MASKS_VARIANT, masks or MASKS_DIR
+    masks_dir = resolve_masks(dataset_name or DATASET, dataset, dataset_dir, logger, paths=paths,
+                              variant=variant, masks=masks)
     labels = torch.tensor([pid2label[it[1]] for it in items])
-    masks = torch.stack([pifpaf_to_masks(np.load(mask_path(p, dataset_dir, masks_dir))) for p in paths])
+    masks = torch.stack([pifpaf_to_masks(np.load(mask_path(p, dataset_dir, masks_dir, variant))) for p in paths])
     return paths, labels, masks
 
 
@@ -742,9 +748,11 @@ def do_train_stage1(prompt_learner, text_encoder, img_feats, labels, vis, logger
 
 
 def main():
-    global NUM_IDS, MAX_EPOCHS, TAB_ENABLED, DATASET, OUTPUT_DIR
+    global NUM_IDS, MAX_EPOCHS, TAB_ENABLED, DATASET, OUTPUT_DIR, MASKS_VARIANT, MASKS_DIR
     parser = argparse.ArgumentParser(description='CLIP-ReID stage 1 with per-part prompts (RN50)')
     parser.add_argument('--dataset', choices=list(DATASETS), default=DATASET)
+    parser.add_argument('--masks-variant', choices=list(MASK_SUFFIX), default=MASKS_VARIANT)
+    parser.add_argument('--masks-dir', type=str, default=MASKS_DIR, help='pre-saved masks outside the dataset dir')
     parser.add_argument('--num-ids', type=int, default=NUM_IDS, help='limit to the first N identities')
     parser.add_argument('--epochs', type=int, default=MAX_EPOCHS)
     parser.add_argument('--resume', type=str, default='', help='checkpoint saved by this script to continue from')
@@ -752,6 +760,7 @@ def main():
     args = parser.parse_args()
     NUM_IDS, MAX_EPOCHS, DATASET = args.num_ids, args.epochs, args.dataset
     OUTPUT_DIR = OUTPUT_DIR.format(dataset=DATASET)
+    MASKS_VARIANT, MASKS_DIR = args.masks_variant, args.masks_dir
     TAB_ENABLED = TAB_ENABLED or args.tab
     resume = torch.load(args.resume, map_location=DEVICE) if args.resume else None
 
@@ -765,7 +774,7 @@ def main():
         FULL_POOL_NEGATIVES=FULL_POOL_NEGATIVES, T2I_BATCH_POSITIVES=T2I_BATCH_POSITIVES, CONTRAST_NORMALIZE=CONTRAST_NORMALIZE,
         CONTRAST_TEMP=CONTRAST_TEMP, TEXT_BANK_REFRESH=TEXT_BANK_REFRESH, TEXT_BANK_MOMENTUM=TEXT_BANK_MOMENTUM,
         TAB_ENABLED=TAB_ENABLED, TAB_W=TAB_W, TAB_DIM=TAB_DIM, TAB_HEADS=TAB_HEADS, TAB_T2I_POOL=TAB_T2I_POOL,
-        NUM_IDS=NUM_IDS, DATASET=DATASET, DATA_ROOT=DATA_ROOT).items()))
+        NUM_IDS=NUM_IDS, DATASET=DATASET, DATA_ROOT=DATA_ROOT, MASKS_VARIANT=MASKS_VARIANT, MASKS_DIR=MASKS_DIR).items()))
 
     h_res, w_res = (H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1
     clip = load_clip_to_cpu(BACKBONE, h_res, w_res, STRIDE).to(DEVICE).eval()
@@ -775,7 +784,7 @@ def main():
     text_encoder = TextEncoder(clip).to(DEVICE).eval()
     transform = T.Compose([T.Resize((H, W)), T.ToTensor(), T.Normalize(PIXEL_MEAN, PIXEL_STD)])
 
-    paths, labels, masks = load_dataset(DATASET, DATA_ROOT, NUM_IDS, logger.info)
+    paths, labels, masks = load_dataset(DATASET, DATA_ROOT, NUM_IDS, logger.info, MASKS_VARIANT, MASKS_DIR)
     num_class = int(labels.max()) + 1
     logger.info(f'{len(paths)} images, {num_class} identities, slots: {SLOT_NAMES}')
     labels = labels.to(DEVICE)
