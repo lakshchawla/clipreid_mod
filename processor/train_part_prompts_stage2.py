@@ -6,24 +6,28 @@ Run from the repo root:
 What stage 2 does here
 * Baseline branch = CLIP-ReID RN50 stage 2, verbatim: gap3 = GAP(x3), gap4 = GAP(x4) with a BNNeck ID head,
   g = xproj[0] with a BNNeck ID head; triplet on all three; i2t = CE(g @ text_global.T); test feature
-  cat(gap4, g) = the `clipreid_baseline` eval row (paper: 89.8 mAP on Market-1501; reproduced at 89.3).
-* LPIM branch (LanguageGuidedPartInteraction, after PromptSG CVPR'24): K+1 identity-agnostic text queries
-  ("A photo of a person", "A photo of the <part> of a person") cross-attend over the x4 locations with
-  projections initialised from CLIP's attention pool; pure cross-attention (no query-to-query term; optional
-  MIM_SELF_LAYERS). Output z0 (global-semantic token) and z1..zK (parts); attentive pooling gives pbar. The
-  part attention maps are supervised by the PifPaf masks (KL) and a visibility head predicts part presence,
-  so nothing external is needed at test time. Losses: ID + triplet on z0 and pbar, visibility-weighted part
-  triplet (LSE gamma annealed after epoch 40), symmetric SupCon between z_s and the stage-1 identity prompts,
-  attention KL, visibility BCE.
-* Text side (frozen): the stage-1 prompts are encoded once into text_all [C, K+1, 1024] (SupCon targets);
-  the K+1 semantic queries are encoded once from fixed templates.
-* Evaluation (every EVAL_PERIOD epochs), mAP / R1 / R5 / R10 for: clipreid_baseline (cat(gap4, g)), lpim
-  (cat(z0, pbar)), holistic (cat(gap4, g, z0, pbar)), part_lse (LSE over mutually visible parts) and, with
-  FUSE_W > 0, fused. Per-part invisible rate and unmatched-pair statistics are logged.
+  cat(gap4, g) = the `clipreid_global` row.
+* Part branch. LanguageGuidedPartInteraction (LPIM, after PromptSG CVPR'24): K+1 identity-agnostic text queries
+  ("A photo of a person", "A photo of the <part> of a person") cross-attend over the x4 locations (pure
+  cross-attention: parts never mix) -> tokens z0 (global-semantic) and z1..zK. Every part owns
+    * a 256-d head h_k = Linear_k(z_k) (the part's retrieval vector) with its own BNNeck ID classifier,
+    * a text adapter A_k: 1024 -> 256 that maps the frozen stage-1 prompts into part k's space, so the prompt of
+      part k is contrasted with exactly that part's 256-d vector (own part = positive, other parts = negatives).
+  A learnable CLS token self-attends over [z0, visible parts] (key padding mask = part visibility) -> fused vector
+  [FUSED_DIM] (`parts_selfattn`). Part visibility is the PifPaf presence in training and the visibility head's
+  prediction at test, so no mask is needed at test time.
+* Losses (each is holistic, part-based or both - see Stage2Loss): CLIP-ReID ID/triplet/i2t on the baseline branch;
+  ID + triplet on the fused vector; per-part ID; part triplet (visibility-masked mean -> LSE worst-part ramp) and a
+  per-part individual triplet on h_k; part<->prompt contrast with cross-part negatives; attention KL; visibility BCE.
+* Text side (frozen): the stage-1 prompts are encoded once into text_all [C, K+1, 1024]; the K+1 semantic queries are
+  encoded once from fixed templates. No dataset-wide pool or memory is used (BANK_SIZE = 0).
+* Evaluation (every EVAL_PERIOD epochs), mAP / R1 / R5 / R10 for: clipreid_global (cat(gap4, g)), parts_selfattn
+  (fused), parts_matching (per-part cosine, masked mean over mutually visible parts; global fallback below
+  MIN_SHARED_PARTS), parts_matching_lse (worst-part), holistic, the combinations global+parts / global+parts_lse / all,
+  and each part alone. Per-part invisible rate and unmatched-pair statistics are logged and a results json is written.
 * --rerank adds two test-time rows (no training change): <row>_rr = k-reciprocal re-ranking (Zhong et al.
   CVPR'17, utils/reranking.py) on RERANK_FEATURE, and <row>_rr_lse = the same with the all-pairs part-LSE
-  distance passed as `local_distmat`, so part visibility shapes the k-reciprocal neighbourhood itself rather
-  than being fused into the final score (FUSE_W). See rerank_rows / part_lse_all_pairs.
+  distance passed as `local_distmat`. See rerank_rows / part_lse_all_pairs.
 * Optimiser / schedule / AMP = SOLVER.STAGE2 of configs/person/cnn_clipreid.yml, 256x128 as in the recipe.
 """
 import os
@@ -31,6 +35,7 @@ import sys
 import math
 import time
 import random
+import json
 import resource
 import argparse
 from datetime import timedelta
@@ -46,8 +51,8 @@ import torchvision.transforms.functional as TF
 from torch.utils.data import Dataset, DataLoader
 from torch.cuda import amp
 
-from processor.train_part_prompts_stage1 import (PartPromptLearner, encode_text, supcon, pifpaf_to_masks,
-                                                  PART_NAMES, K, S, SLOT_NAMES)
+from processor.train_part_prompts_stage1 import (PartPromptLearner, encode_text, supcon_from_logits, pifpaf_to_masks,
+                                                  CONTRAST_TEMP, PART_NAMES, K, S, SLOT_NAMES)
 from model.make_model_clipreid import load_clip_to_cpu, TextEncoder, weights_init_kaiming, weights_init_classifier
 from datasets.part_datasets import DATASETS, MASK_SUFFIX, build_dataset, mask_path, resolve_masks
 from datasets.sampler import PartHardPKSampler
@@ -56,7 +61,7 @@ from datasets.make_dataloader_clipreid import val_collate_fn
 from loss.softmax_loss import CrossEntropyLabelSmooth
 from loss.triplet_loss import euclidean_dist
 from solver.lr_scheduler import WarmupMultiStepLR
-from utils.metrics import eval_func, euclidean_distance
+from utils.metrics import eval_func
 from utils.reranking import re_ranking
 from utils.logger import setup_logger
 from utils.meter import AverageMeter
@@ -89,20 +94,34 @@ WARMUP_FACTOR, WARMUP_ITERS, WARMUP_METHOD = 0.01, 10, 'linear'
 USE_AMP = True
 
 ID_W, TRI_W, I2T_W = 1.0, 1.0, 1.0            # CLIP-ReID stage-2 weights on the baseline branch (GAP(x4), GAP(x3), xproj)
-LPIM_ID_W, LPIM_TRI_W = 1.0, 1.0              # ID + triplet on the LPIM global token z0 and the pooled parts
-PART_TRI_W = 1.0                              # per-part triplet on z1..zK (visibility-weighted, LSE annealed)
-PART_ID_W = 0.5                               # ID CE (own BNNeck head per part) on z1..zK, visible parts only
-SUPCON_W = 0.5                                # symmetric SupCon between z_s and the stage-1 identity prompts (PromptSG lambda)
+FUSED_ID_W, FUSED_TRI_W = 1.0, 1.0            # ID + triplet on the self-attended fused vector (holistic over parts)
+PART_ID_W = 0.3                               # ID CE (own BNNeck classifier per part) on h_1..h_K, visible parts only. BPBreID
+                                              # (GiLt) keeps this at 0 - a part such as black trousers is not unique to one
+                                              # identity - so it is modest and ablated ({0, 0.3, 0.5}).
+PART_TRI_W = 1.0                              # part triplet on h_k: visibility-masked mean distance, LSE worst-part ramp
+PART_INDIV_TRI_W = 0.5                        # per-part individual triplet: every part mined on its own distance, both visible
+PART_ALIGN_W = 0.5                            # part<->prompt contrast: h_k vs the stage-1 prompts through the adapter A_k
 ATTN_W, VIS_W = 1.0, 0.1                      # attention-map KL to the PifPaf masks; part-presence BCE for the visibility head
+PART_DIM = 256                                # per-part retrieval vector (BPBreID's part dimension)
+FUSED_DIM = 1280                              # self-attended fused vector; = 5 x 256 only to weigh equally with the part block
+FUSE_LAYERS = 1                               # self-attention layers of the fusion (CLS + [z0, parts])
+FUSED_TRI_NORMALIZE = True                    # triplet on the L2-normalised fused vector: it is retrieved by cosine, and its raw norm
+                                              # (~20-30) would make the 0.3 margin ~1% of the distances. The CLIP-ReID branch
+                                              # (gap3/gap4/g) stays on raw features, verbatim.
+FUSE_DETACH = True                            # part tokens enter the fusion detached, so the fused loss cannot make a part token
+                                              # carry whole-body identity (z0 and the fusion itself still train). Ablate False.
+CROSS_PART_NEG = True                         # part<->prompt contrast: the batch identities' prompts of the OTHER parts are
+                                              # negatives for part k's vector (part 1 <-> ctx 1 only)
+LPIM_LEARN_QUERY = False                      # zero-init learnable offset on each LPIM part query (optional)
 TEXT_ERASE_PROB = 0.1              # random text erasing: per (sample, slot), drop that slot's identity prompt from the
-                                   # SupCon term, and for slot 0 drop the sample from i2t. The text side of Random
+                                   # part<->prompt contrast, and for slot 0 drop the sample from i2t. The text side of Random
                                    # Erasing (RE_PROB on images): the image slot must stand on its own when its text
                                    # anchor is missing, which is the occluded-part case. 0 = off; at 0.1, 0.9^6 = 53%
                                    # of samples keep all six anchors. Ablate {0, 0.1, 0.2, 0.3}.
 TEXT_DROPOUT = 0.1                 # Bernoulli mask over the 1024 text dimensions, rescaled by 1/(1-p), fresh every
                                    # step and shared across identities within a slot (so every comparison in that slot
                                    # stays in one sub-space and logits remain comparable across classes). Applies to
-                                   # both text consumers, i2t and SupCon. The LPIM semantic queries are never touched:
+                                   # both text consumers, i2t and the part<->prompt contrast. The LPIM semantic queries are never touched:
                                    # they are part of the test-time path. 0 = off.
 HARD_SAMPLING = False              # per-part hard-negative PK batches (PartHardPKSampler): each batch is built around one
                                    # anchor identity and one slot, HARD_FRAC of the other identities being that anchor's
@@ -112,31 +131,33 @@ NBR_K = 15                         # neighbours kept per (slot, identity); ident
 NBR_JACCARD = True                 # rank neighbours by (1-NBR_LAMBDA)*Jaccard(top-NBR_K1 sets) + NBR_LAMBDA*cosine distance
 NBR_K1, NBR_LAMBDA = 30, 0.3
 HARD_START_EPOCH = 10              # random PK until then (features and parts settle first)
-NBR_REFRESH = 10                   # epochs between neighbour-table rebuilds from the model's own per-identity mean z_s
+NBR_REFRESH = 10                   # epochs between neighbour-table rebuilds from the model's own per-identity prototypes (g, h_k)
                                    # (0 = keep the table built from the stage-1 prompts text_all)
 MARGIN = 0.3
 LSE_GAMMA = 5.0                    # soft-max sharpness over parts (-> max distance as gamma grows)
 LSE_GAMMA_EPOCHS = (40, 80)        # part triplet uses the visibility-weighted mean until epoch 40, then gamma ramps
                                    # linearly to LSE_GAMMA by epoch 80 (chasing the worst part only once parts are trained)
-LSE_INCLUDE_GLOBAL = False         # add z0 as slot 0 of the LSE part distance
-MIM_SELF_LAYERS = 0                # self-attention blocks after the cross-attention (PromptSG: +1.9 / +1.6 mAP for 1 / 2
-                                   # layers on ViT). 0 = pure cross-attention, no query-to-query interaction.
-FUSE_W = 0.0                       # >0: also evaluate d_holistic/mean + FUSE_W * d_lse/mean
+MIM_SELF_LAYERS = 0                # self-attention blocks inside LPIM. Keep 0: they would mix the part tokens before the
+                                   # per-part heads; the self-attended vector is built separately (PartFusion).
 
 BANK_SIZE = 0                      # cross-batch memory for triplet mining; 0 = batch-only (CLIP-ReID / BPBreID
                                    # baseline behaviour), 8192 = XBM ablation
 BANK_START_EPOCH = 5               # epochs of batch-only mining before the bank is used (features settle first)
 
 EVAL_SLOTWISE_NORM = True          # holistic vector: L2-normalise each slot before concatenating (see
-                                   # holistic_vector). False restores the CLIP-ReID convention of a single
+                                   # concat_feature). False restores the CLIP-ReID convention of a single
                                    # normalisation over the concatenation. Eval-only, no retraining needed.
+EVAL_W_SELF, EVAL_W_PARTS = 1.0, 1.0   # weights of the self-attended / part-matching distances in the combined rows
+MIN_SHARED_PARTS = 2               # a pair with fewer mutually visible parts falls back to the global distance
+EVAL_SOFT_VIS = False              # weight parts by their visibility probability (0 below 0.5) instead of a 0/1 mask
+EVAL_PART_ROWS = True              # also report every part alone (where both images show it)
 EVAL_CHUNK = 2048
 GRID = ((H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1)      # x4 feature grid (attention_targets / training-time visibility)
 
 RERANK = False                     # k-reciprocal re-ranking (Zhong et al. CVPR'17, utils/reranking.py). Test-time
                                    # only: it changes no gradient and no checkpoint, so --rerank can be added to
                                    # any --eval-only run over a finished stage-2 model.
-RERANK_FEATURE = 'holistic'        # eval row to re-rank: 'holistic' | 'lpim' | 'clipreid_baseline'
+RERANK_FEATURE = 'holistic'        # eval row to re-rank: 'holistic' | 'parts_selfattn' | 'clipreid_global'
 RERANK_K1, RERANK_K2, RERANK_LAMBDA = 50, 15, 0.3     # utils/metrics.py:126 (the CVPR'17 paper uses 20, 6, 0.3)
 RERANK_LOCAL_W = 1.0               # weight of the part-LSE distance inside the k-reciprocal neighbourhood, after
                                    # mean-ratio scaling (see rerank_rows). 0 reproduces the plain row.
@@ -236,14 +257,6 @@ class BNNeckHead(nn.Module):
         return feat, self.fc(feat)
 
 
-def pool_parts(parts, logits, vis):
-    """Attentive pooling over the visible parts only: parts [N,K,D], logits [N,K], vis [N,K] bool -> pbar [N,D],
-    alpha [N,K]. A row with no visible part falls back to the learned weights over all parts."""
-    vis = vis | ~vis.any(1, keepdim=True)
-    alpha = torch.softmax(logits.masked_fill(~vis, float('-inf')), dim=1)
-    return (alpha[..., None].to(parts.dtype) * parts).sum(1), alpha
-
-
 class LanguageGuidedPartInteraction(nn.Module):
     """Language-guided Part Interaction Module (LPIM): K+1 semantic text queries attend over the x4 locations.
 
@@ -251,25 +264,25 @@ class LanguageGuidedPartInteraction(nn.Module):
     output *is* the ReID feature: cross-attention with the prompt embedding as query and the patch tokens as
     key/value, trained with ID + triplet. Here that idea is run with K+1 queries - "A photo of a person" and
     "A photo of the <part> of a person" - so the module yields one global-semantic token and K part tokens.
+    This is the image-side cross-attention *from prompts*: the part-k query reads the image only where part k is.
     * K/V/output projections start from CLIP's own attention pool (k_proj, v_proj, c_proj, positional
-      embedding), so at initialisation, with near-uniform attention, every query returns CLIP's mean-pooled
-      projected feature; the queries then learn *where* to look. Queries are identity-agnostic and identical
-      at train and test, so no identity prompt or inversion network is needed at inference.
+      embedding), so the queries start from CLIP's pooled feature and then learn *where* to look. Queries are
+      identity-agnostic and identical at train and test, so no identity prompt is needed at inference.
     * Pure cross-attention: queries never attend to each other (MIM_SELF_LAYERS optional blocks follow it).
     * The head-averaged attention map of each part query is supervised by its PifPaf mask (KL), which turns the
       masks into where-to-look supervision instead of hard pooling weights; a visibility head on each part
       token predicts part presence so visibility is available at test time without masks.
-    * Attentive pooling over the K part tokens (alpha = softmax(w . z_k)) gives one occlusion-aware parts vector.
-    The pooling weights are masked by part visibility: `vis` [N,K] bool when given (ground-truth presence in
-    training), else the visibility head's own prediction (test), so an absent part never enters pbar.
-    forward(x4, vis=None) -> dict(z [N,K+1,D], attn [N,K+1,HW], pbar [N,D], alpha [N,K], vis_logit [N,K]).
+    * LPIM_LEARN_QUERY adds a zero-initialised learnable offset to each query (a per-part learnt prompt).
+    forward(x4) -> dict(z [N,K+1,D], attn [N,K+1,HW], vis_logit [N,K]).
     """
 
-    def __init__(self, attnpool, text_queries, num_self_layers=MIM_SELF_LAYERS):
+    def __init__(self, attnpool, text_queries, num_self_layers=None):
         super().__init__()
+        num_self_layers = MIM_SELF_LAYERS if num_self_layers is None else num_self_layers
         C, D = attnpool.k_proj.in_features, attnpool.c_proj.out_features
         self.num_heads = attnpool.num_heads
         self.register_buffer('text_queries', text_queries.detach().clone())
+        self.query_delta = nn.Parameter(torch.zeros_like(self.text_queries)) if LPIM_LEARN_QUERY else None
         self.pos_embed = nn.Parameter(attnpool.positional_embedding[1:].detach().clone())
         self.q_proj = nn.Linear(D, C)
         self.k_proj = nn.Linear(C, C)
@@ -287,15 +300,17 @@ class LanguageGuidedPartInteraction(nn.Module):
         nn.init.zeros_(self.ffn[2].bias)
         self.self_layers = nn.ModuleList([nn.TransformerEncoderLayer(D, 8, 4 * D, dropout=0.0, batch_first=True, norm_first=True)
                                           for _ in range(num_self_layers)])
-        self.pool_w = nn.Linear(D, 1)
         self.vis_head = nn.Linear(D, 1)
 
-    def forward(self, x4, vis=None):
+    def queries(self):
+        return self.text_queries if self.query_delta is None else self.text_queries + self.query_delta
+
+    def forward(self, x4):
         N, C, Hf, Wf = x4.shape
         HW, h, d = Hf * Wf, self.num_heads, C // self.num_heads
         tokens = x4.flatten(2).transpose(1, 2) + self.pos_embed[None].to(x4.dtype)
         Sq = self.text_queries.shape[0]
-        Q = self.q_proj(self.text_queries.to(x4.dtype)).view(Sq, h, d).transpose(0, 1)
+        Q = self.q_proj(self.queries().to(x4.dtype)).view(Sq, h, d).transpose(0, 1)
         Kt = self.k_proj(tokens).view(N, HW, h, d).permute(0, 2, 1, 3)
         V = self.v_proj(tokens).view(N, HW, h, d).permute(0, 2, 1, 3)
         attn = torch.softmax(torch.einsum('hsd,nhld->nhsl', Q, Kt).float() / math.sqrt(d), dim=-1)
@@ -304,10 +319,31 @@ class LanguageGuidedPartInteraction(nn.Module):
         z = z + self.ffn(self.norm(z))
         for layer in self.self_layers:
             z = layer(z)
-        parts = z[:, 1:]
-        vis_logit = self.vis_head(parts).squeeze(-1).float()
-        pbar, alpha = pool_parts(parts, self.pool_w(parts).squeeze(-1).float(), (vis_logit > 0) if vis is None else vis)
-        return dict(z=z, attn=attn.mean(1), pbar=pbar, alpha=alpha, vis_logit=vis_logit)
+        return dict(z=z, attn=attn.mean(1), vis_logit=self.vis_head(z[:, 1:]).squeeze(-1).float())
+
+
+class PartFusion(nn.Module):
+    """Self-attended fused vector: a learnable CLS token attends over [z0, z1..zK] (+ a learnt slot embedding), keys of
+    invisible parts masked out, so an occluded part never enters the vector. 1 layer by default; output
+    Linear(D -> FUSED_DIM). forward(z [N,K+1,D], vis [N,K] bool) -> [N, FUSED_DIM]."""
+
+    def __init__(self, dim, out_dim=None, layers=None, heads=8):
+        super().__init__()
+        out_dim, layers = out_dim or FUSED_DIM, FUSE_LAYERS if layers is None else layers      # read at build time, not def time
+        self.cls = nn.Parameter(torch.randn(1, 1, dim) * 0.02)
+        self.slot_embed = nn.Parameter(torch.randn(1, K + 1, dim) * 0.02)
+        self.layers = nn.ModuleList([nn.TransformerEncoderLayer(dim, heads, 4 * dim, dropout=0.0, batch_first=True, norm_first=True)
+                                     for _ in range(layers)])
+        self.norm = nn.LayerNorm(dim)
+        self.out = nn.Linear(dim, out_dim)
+
+    def forward(self, z, vis):
+        N = z.shape[0]
+        x = torch.cat([self.cls.expand(N, -1, -1).to(z.dtype), z + self.slot_embed.to(z.dtype)], dim=1)
+        keep = torch.cat([torch.ones(N, 2, dtype=torch.bool, device=z.device), vis], dim=1)      # CLS and z0 always visible
+        for layer in self.layers:
+            x = layer(x, src_key_padding_mask=~keep)
+        return self.out(self.norm(x[:, 0]))
 
 
 class PartCLIPReID(nn.Module):
@@ -315,13 +351,14 @@ class PartCLIPReID(nn.Module):
 
     Baseline branch (make_model_clipreid.py build_transformer, RN50): gap3 = GAP(x3) [1024], gap4 = GAP(x4)
     [2048] with a BNNeck ID head, g = xproj[0] [1024] with a BNNeck ID head and the i2t loss; triplet on all
-    three; test feature cat(gap4, g) - the `clipreid_baseline` row.
-    LPIM branch: z0 (global-semantic token) and pbar (attentively pooled parts), each with a BNNeck ID head;
-    z1..zK for the per-part triplet / LSE matching; visibility from the LPIM head.
-    forward(x, vis=None) -> dict(gap3, gap4, g, z, z0, zparts, pbar, attn, alpha, vis_logit[, score_gap4, score_g,
-    score_z0, score_pbar, score_parts]).
-    The M1 variant (GWAP parts through a linear map, BPAM masks, concat ID head) is the ablation reference:
-    git show e52d763.
+    three; test feature cat(gap4, g) - the `clipreid_global` row.
+    Part branch: LPIM tokens z0..zK; per-part 256-d heads h_k = part_proj[k](z_k) (own BNNeck classifier id_parts[k]);
+    the fused self-attended vector (PartFusion, own BNNeck id_fused); per-part text adapters text_adapters[k] that map
+    the stage-1 prompts into part k's 256-d space (training only). Visibility: `vis` [N,K] bool when given (ground-truth
+    presence in training), else the visibility head's own prediction (test). It gates the fusion; the part heads
+    themselves are visibility-free and the invisible blocks are zeroed / masked by whoever consumes them.
+    forward(x, vis=None) -> dict(gap3, gap4, g, z, z0, zparts, h, fused, attn, vis_logit, grid[, score_gap4,
+    score_g, score_fused, score_parts [N,K,C]]).
     """
 
     def __init__(self, visual, num_classes, text_queries):
@@ -331,34 +368,40 @@ class PartCLIPReID(nn.Module):
         D = visual.attnpool.c_proj.out_features
         self.id_gap4 = BNNeckHead(visual.attnpool.v_proj.in_features, num_classes)
         self.id_global = BNNeckHead(D, num_classes)
-        self.id_z0 = BNNeckHead(D, num_classes)
-        self.id_pbar = BNNeckHead(D, num_classes)
-        self.id_parts = nn.ModuleList([BNNeckHead(D, num_classes) for _ in range(K)])
+        self.part_proj = nn.ModuleList([nn.Linear(D, PART_DIM) for _ in range(K)])
+        self.id_parts = nn.ModuleList([BNNeckHead(PART_DIM, num_classes) for _ in range(K)])
+        self.fusion = PartFusion(D)
+        self.id_fused = BNNeckHead(FUSED_DIM, num_classes)
+        self.text_adapters = nn.ModuleList([nn.Linear(D, PART_DIM, bias=False) for _ in range(K)])
 
     def forward(self, x, vis=None):
         x3, x4, xproj = self.visual(x)
         gap3, gap4, g = x3.mean((2, 3)), x4.mean((2, 3)), xproj[0]
-        out = self.lpim(x4, vis)
-        res = dict(gap3=gap3, gap4=gap4, g=g, z=out['z'], z0=out['z'][:, 0], zparts=out['z'][:, 1:], pbar=out['pbar'],
-                   attn=out['attn'], alpha=out['alpha'], vis_logit=out['vis_logit'], grid=tuple(x4.shape[2:]))
+        out = self.lpim(x4)
+        z = out['z']
+        h = torch.stack([proj(z[:, 1 + k]) for k, proj in enumerate(self.part_proj)], dim=1)       # [N,K,PART_DIM]
+        vis_used = (out['vis_logit'] > 0) if vis is None else vis
+        z_fuse = torch.cat([z[:, :1], z[:, 1:].detach()], dim=1) if FUSE_DETACH else z
+        fused = self.fusion(z_fuse, vis_used)
+        res = dict(gap3=gap3, gap4=gap4, g=g, z=z, z0=z[:, 0], zparts=z[:, 1:], h=h, fused=fused,
+                   attn=out['attn'], vis_logit=out['vis_logit'], grid=tuple(x4.shape[2:]))
         if self.training:
             res['score_gap4'] = self.id_gap4(gap4)[1]
             res['score_g'] = self.id_global(g)[1]
-            res['score_z0'] = self.id_z0(res['z0'])[1]
-            res['score_pbar'] = self.id_pbar(res['pbar'])[1]
-            res['score_parts'] = torch.stack([h(res['zparts'][:, k])[1] for k, h in enumerate(self.id_parts)], dim=1)
+            res['score_fused'] = self.id_fused(fused)[1]
+            res['score_parts'] = torch.stack([head(h[:, k])[1] for k, head in enumerate(self.id_parts)], dim=1)
         return res
 
 
 # ----------------------------------------------------------------------------- part distances / losses
 def lse_combine(d, M, gamma):
     """Combine per-part distances with a log-sum-exp soft-max over mutually visible parts.
-    d, M: [K, A, B] distances and 0/1 mutual-visibility. Returns D [A,B] = (1/gamma) ln sum_k w_k e^{gamma d_k}
+    d, M: [K, A, B] distances and mutual-visibility (0/1, or soft weights in [0,1]). Returns D [A,B] = (1/gamma) ln sum_k w_k e^{gamma d_k}
     with w_k = M_k / sum_k M_k, valid [A,B] (>= 1 shared part; invalid entries are -1) and the number of
     unmatched parts per pair [A,B]. gamma -> 0 is the visibility-weighted mean (BPBreID)."""
     n_shared = M.sum(0)
     valid = n_shared > 0
-    w = M / n_shared.clamp(min=1)[None]
+    w = M / n_shared.clamp(min=1e-6)[None]
     if gamma < 1e-3:
         D = (w * d).sum(0)
     else:
@@ -370,9 +413,12 @@ def lse_combine(d, M, gamma):
 
 
 def part_pairwise_distances(pa, va, pb, vb):
-    """pa [A,K,D], pb [B,K,D] (L2-normalised inside), va/vb [A,K]/[B,K] bool -> d, M of shape [K,A,B]."""
+    """pa [A,K,D], pb [B,K,D] (L2-normalised inside), va/vb [A,K]/[B,K] bool (or soft weights) -> d, M [K,A,B]."""
     d = 1 - torch.einsum('ikd,jkd->kij', F.normalize(pa.float(), dim=-1), F.normalize(pb.float(), dim=-1))
-    M = (va.t()[:, :, None] & vb.t()[:, None, :]).to(d.dtype)
+    if va.dtype == torch.bool and vb.dtype == torch.bool:
+        M = (va.t()[:, :, None] & vb.t()[:, None, :]).to(d.dtype)
+    else:
+        M = torch.minimum(va.t()[:, :, None].float(), vb.t()[:, None, :].float())
     return d, M
 
 
@@ -380,15 +426,15 @@ class FeatureBank:
     """Cross-batch memory of detached embeddings (XBM, Wang & al. CVPR20).
 
     Triplet mining inside one PK batch only sees 64 samples / 16 identities. The bank keeps the most recent
-    BANK_SIZE embeddings (z0, part tokens, visibility, label), so anchors are mined against the whole dataset: with
+    BANK_SIZE embeddings (fused vector, part heads h_k, visibility, label), so anchors are mined against the whole dataset: with
     8192 slots and 12936 training images, a batch is compared against ~2/3 of Market-1501. Bank entries are
     detached (gradient flows only through the anchors), which is what makes the large pool affordable.
     """
 
-    def __init__(self, size, dim, parts, device):
+    def __init__(self, size, dim, parts, device, part_dim=None):
         self.size = size
         self.g = torch.zeros(size, dim, device=device)
-        self.p = torch.zeros(size, parts, dim, device=device)
+        self.p = torch.zeros(size, parts, part_dim or dim, device=device)
         self.vis = torch.zeros(size, parts, dtype=torch.bool, device=device)
         self.labels = torch.zeros(size, dtype=torch.long, device=device)
         self.ptr, self.filled = 0, 0
@@ -436,13 +482,16 @@ def columns_with_bank(batch_tensors, bank_tensors, target):
 class GlobalTripletLoss(nn.Module):
     """CLIP-ReID global triplet, mined against the batch plus the cross-batch memory."""
 
-    def __init__(self, margin=MARGIN):
+    def __init__(self, margin=MARGIN, normalize=False):
         super().__init__()
         self.ranking_loss = nn.MarginRankingLoss(margin=margin)
+        self.normalize = normalize
 
     def forward(self, g, labels, bank=None):
         g = g.float()
         cols, col_labels, self_cols = columns_with_bank((g,), bank, labels)
+        if self.normalize:                      # anchors, batch columns and memory entries all on the unit sphere
+            g, cols = F.normalize(g, dim=-1), (F.normalize(cols[0], dim=-1),)
         D = euclidean_dist(g, cols[0])
         valid = torch.ones_like(D, dtype=torch.bool)
         return batch_hard(D, labels, col_labels, valid, self_cols, self.ranking_loss)
@@ -466,11 +515,22 @@ class PartLSETripletLoss(nn.Module):
         return batch_hard(D, labels, col_labels, valid, self_cols, self.ranking_loss)
 
 
-def part_embeddings_for_lse(z0, zparts, vis_parts):
-    """[N,M,D] and [N,M] visibility used by the LSE distance; optionally includes z0 (always visible) as slot 0."""
-    if LSE_INCLUDE_GLOBAL:
-        return torch.cat([z0[:, None], zparts], dim=1), torch.cat([torch.ones_like(vis_parts[:, :1]), vis_parts], dim=1)
-    return zparts, vis_parts
+class PartIndividualTripletLoss(nn.Module):
+    """Batch-hard triplet per part on that part's own cosine distance (BPBreID's part_individual_triplet_loss), mined
+    against the batch plus the cross-batch memory, over pairs where both images show the part. Unlike the part-averaged
+    triplet, a wrong part cannot be hidden behind the other parts: the shoes of two otherwise identical people must
+    differ in the feet vector on their own."""
+
+    def __init__(self, margin=MARGIN):
+        super().__init__()
+        self.ranking_loss = nn.MarginRankingLoss(margin=margin)
+
+    def forward(self, p, vis, labels, bank=None):
+        p = p.float()
+        cols, col_labels, self_cols = columns_with_bank((p, vis), bank, labels)
+        d, M = part_pairwise_distances(p, vis, cols[0], cols[1])
+        losses = [batch_hard(d[k], labels, col_labels, M[k] > 0, self_cols, self.ranking_loss) for k in range(d.shape[0])]
+        return sum(losses) / len(losses)
 
 
 def lse_gamma_at(epoch):
@@ -482,15 +542,17 @@ def lse_gamma_at(epoch):
 
 
 def build_neighbours(feats, k=NBR_K, jaccard=None, k1=None, lam=None):
-    """Per-slot confusable identities. feats [C,S,D] -> nbr [S,C,k] int64 (numpy), nearest first, self excluded.
+    """Per-slot confusable identities. feats = [C,S,D] or a list of S tensors [C,D_s] (slots may differ in width)
+    -> nbr [S,C,k] int64 (numpy), nearest first, self excluded.
     Distance per slot = (1-lam)*Jaccard(top-k1 sets) + lam*cosine distance (cosine only if jaccard is off)."""
     jaccard, k1, lam = NBR_JACCARD if jaccard is None else jaccard, k1 or NBR_K1, NBR_LAMBDA if lam is None else lam
-    f = F.normalize(feats.float(), dim=-1)
-    C = f.shape[0]
+    slots = list(feats.unbind(1)) if torch.is_tensor(feats) else list(feats)
+    C = slots[0].shape[0]
     k, k1 = min(k, C - 1), min(k1, C - 1)
     out = []
-    for s_ in range(f.shape[1]):
-        dist = 1 - f[:, s_] @ f[:, s_].t()
+    for x in slots:
+        f = F.normalize(x.float(), dim=-1)
+        dist = 1 - f @ f.t()
         if jaccard:
             member = torch.zeros_like(dist).scatter_(1, dist.topk(k1 + 1, largest=False).indices, 1.0)
             inter = member @ member.t()
@@ -503,22 +565,25 @@ def build_neighbours(feats, k=NBR_K, jaccard=None, k1=None, lam=None):
 
 @torch.no_grad()
 def identity_slot_means(model, loader, num_classes):
-    """The model's own identity prototypes: mean z_s per identity over the (un-augmented) train set, and the
-    fraction of an identity's images in which each part is predicted visible. -> [C,S,D], [C,S]."""
+    """The model's own identity prototypes over the (un-augmented) train set, in the spaces matching actually uses:
+    slot 0 = mean g (CLIP global), slot k = mean h_k over the images where part k is predicted visible. Returns a list of
+    S tensors [C, D_s] and the fraction of an identity's images in which each part is predicted visible, [C, S]."""
     model.eval()
-    sums, count, vis = None, torch.zeros(num_classes, device=DEVICE), None
+    sums, seen, vis = None, torch.zeros(num_classes, device=DEVICE), None
     for img, pid, _, _, _, _ in loader:
         res = model(img.to(DEVICE))
         pid = torch.as_tensor(np.asarray(pid), device=DEVICE).long()
-        z = res['z'].float()
+        v = res['vis_logit'] > 0
+        slot_feats = [res['g'].float()] + [res['h'][:, k].float() * v[:, k:k + 1] for k in range(K)]
         if sums is None:
-            sums = torch.zeros(num_classes, *z.shape[1:], device=DEVICE)
-            vis = torch.zeros(num_classes, z.shape[1], device=DEVICE)
-        v = torch.cat([torch.ones_like(res['vis_logit'][:, :1]), (res['vis_logit'] > 0).float()], dim=1)
-        sums.index_add_(0, pid, z)
-        vis.index_add_(0, pid, v)
-        count.index_add_(0, pid, torch.ones_like(pid, dtype=torch.float))
-    return sums / count.clamp(min=1)[:, None, None], vis / count.clamp(min=1)[:, None]
+            sums = [torch.zeros(num_classes, x.shape[1], device=DEVICE) for x in slot_feats]
+            vis = torch.zeros(num_classes, S, device=DEVICE)
+        for acc, x in zip(sums, slot_feats):
+            acc.index_add_(0, pid, x)
+        vis.index_add_(0, pid, torch.cat([torch.ones_like(v[:, :1]), v], dim=1).float())
+        seen.index_add_(0, pid, torch.ones_like(pid, dtype=torch.float))
+    counts = vis.clamp(min=1)                                    # per (identity, slot) number of images that show it
+    return [acc / counts[:, i:i + 1] for i, acc in enumerate(sums)], vis / seen.clamp(min=1)[:, None]
 
 
 def attention_targets(masks, size):
@@ -531,25 +596,30 @@ def attention_targets(masks, size):
 
 
 class Stage2Loss(nn.Module):
-    """Baseline terms are CLIP-ReID stage 2 verbatim (loss/make_loss.py + processor_clipreid_stage2.py):
-        id  = CE(score_gap4) + CE(score_g);  tri = triplet(gap3) + triplet(gap4) + triplet(g);  i2t = CE(g @ text_global.T)
-    LPIM terms (all on features that are matched at test time):
-        lpim_id  = CE(score_z0) + CE(score_pbar);  lpim_tri = triplet(z0) + triplet(pbar)
-        part_tri = batch-hard triplet on z1..zK, visibility-weighted mean -> LSE as gamma anneals (lse_gamma_at)
-        supcon   = mean over slots of the symmetric SupCon between z_s and the batch's stage-1 identity prompts
-                   (PromptSG's L_SupCon, batch positives / batch negatives, normalised, CLIP temperature)
-        Random text erasing (training only, erased_text): TEXT_ERASE_PROB drops a (sample, slot) prompt anchor
-        from SupCon and, for slot 0, that sample from i2t; TEXT_DROPOUT masks text embedding dimensions.
-        part_id  = ID CE on each part token through its own BNNeck head, on the images where that part is present
-        attn     = KL(PifPaf part mask || part attention map), present parts only;  vis = BCE(vis_logit, present)
-    loss = ID_W*id + TRI_W*tri + I2T_W*i2t + LPIM_ID_W*lpim_id + LPIM_TRI_W*lpim_tri + PART_TRI_W*part_tri
-           + PART_ID_W*part_id + SUPCON_W*supcon + ATTN_W*attn + VIS_W*vis"""
+    """Where each term acts (H = holistic/global features, P = per-part 256-d vectors):
+      H   id  = CE(score_gap4) + CE(score_g);  tri = triplet(gap3) + triplet(gap4) + triplet(g);  i2t = CE(g @ text_global.T)
+          (CLIP-ReID stage 2 verbatim, loss/make_loss.py + processor_clipreid_stage2.py)
+      H+P fused_id / fused_tri = ID + triplet on the self-attended fused vector (gradient reaches z0 and the fusion; part
+          tokens only if FUSE_DETACH is off)
+      P   part_id    = ID CE on each h_k through its own BNNeck classifier, on images where part k is present
+      P   part_tri   = batch-hard triplet on the visibility-masked mean of the part distances; LSE worst-part ramp (lse_gamma_at)
+      P   part_indiv = batch-hard triplet per part on that part's own distance (both images show it)
+      P   align      = part<->prompt contrast: h_k vs A_k(stage-1 prompts of the batch identities), symmetric; positive =
+                       (own identity, part k); with CROSS_PART_NEG the same identities' prompts of the other parts are
+                       extra negatives for h_k. Random text erasing (training only, erased_text): TEXT_ERASE_PROB drops a
+                       (sample, slot) anchor from this term and, for slot 0, that sample from i2t; TEXT_DROPOUT masks text
+                       embedding dimensions.
+      P   attn       = KL(PifPaf part mask || part attention map), present parts only;  vis = BCE(vis_logit, present)
+    loss = ID_W*id + TRI_W*tri + I2T_W*i2t + FUSED_ID_W*fused_id + FUSED_TRI_W*fused_tri + PART_ID_W*part_id
+           + PART_TRI_W*part_tri + PART_INDIV_TRI_W*part_indiv + PART_ALIGN_W*align + ATTN_W*attn + VIS_W*vis"""
 
     def __init__(self, num_classes, text_all):
         super().__init__()
         self.xent = CrossEntropyLabelSmooth(num_classes=num_classes)
         self.triplet = GlobalTripletLoss(MARGIN)
+        self.fused_triplet = GlobalTripletLoss(MARGIN, normalize=FUSED_TRI_NORMALIZE)
         self.part_triplet = PartLSETripletLoss(gamma=0.0)
+        self.part_indiv = PartIndividualTripletLoss(MARGIN)
         self.register_buffer('text_all', text_all)
 
     def erased_text(self, target):
@@ -565,7 +635,34 @@ class Stage2Loss(nn.Module):
             erase = torch.rand(B, S, device=target.device) >= TEXT_ERASE_PROB
         return text_all, erase
 
-    def forward(self, res, masks, target, bank=None):
+    def part_prompt_contrast(self, h, present, target, text_all, erase, adapters):
+        """h [B,K,d]; text_all [C,S,D]. Per part k, over images showing it: i2t over the columns (identity u, part k') of the
+        batch identities seen through adapter k (positive = own identity at part k; other identities at k and, with
+        CROSS_PART_NEG, every identity at k' != k are negatives), t2i = prompt of each sample's identity vs the part-k
+        vectors of the batch. Returns the mean loss and the per-part in-batch i2t top-1 [K] (own prompt of own part)."""
+        uniq, inv = torch.unique(target, return_inverse=True)
+        U, dev = uniq.shape[0], target.device
+        col_u = torch.arange(U, device=dev).repeat_interleave(K)
+        col_s = torch.arange(K, device=dev).repeat(U)
+        losses, acc = [], torch.zeros(K)
+        for k in range(K):
+            keep = present[:, k] & erase[:, k + 1]
+            if keep.sum() < 2:
+                continue
+            t = F.normalize(adapters[k](text_all[uniq][:, 1:]).float(), dim=-1)                 # [U,K,d]
+            x = F.normalize(h[keep, k].float(), dim=-1)                                         # [n,d]
+            own = inv[keep]
+            logits = x @ t.flatten(0, 1).t() / CONTRAST_TEMP                                    # [n, U*K], column = u*K + k'
+            if not CROSS_PART_NEG:
+                logits = logits.masked_fill((col_s != k)[None], float('-inf'))
+            pos = (col_u[None] == own[:, None]) & (col_s[None] == k)
+            same = target[keep][:, None] == target[keep][None]
+            losses.append(supcon_from_logits(logits, pos) + supcon_from_logits(t[own, k] @ x.t() / CONTRAST_TEMP, same))
+            acc[k] = (logits.argmax(1) == own * K + k).float().mean().item()
+        loss = sum(losses) / len(losses) if losses else h.sum() * 0
+        return loss, acc
+
+    def forward(self, res, masks, target, bank=None, text_adapters=None):
         terms = {}
         text_all, erase = self.erased_text(target)
         terms['id'] = self.xent(res['score_gap4'], target) + self.xent(res['score_g'], target)
@@ -574,30 +671,21 @@ class Stage2Loss(nn.Module):
         terms['i2t'] = (self.xent(res['g'][keep0] @ text_all[:, 0].t(), target[keep0]) if keep0.any()
                         else res['g'].sum() * 0)
 
-        terms['lpim_id'] = self.xent(res['score_z0'], target) + self.xent(res['score_pbar'], target)
-        z0_bank = p_bank = None
+        f_bank = p_bank = None
         if bank is not None:
-            bz0, bzp, bvis, blabels = bank
-            z0_bank = (bz0, blabels)
-            p_bank = part_embeddings_for_lse(bz0, bzp, bvis) + (blabels,)
-        terms['lpim_tri'] = self.triplet(res['z0'], target, z0_bank) + self.triplet(res['pbar'], target)
+            bf, bh, bvis, blabels = bank
+            f_bank, p_bank = (bf, blabels), (bh, bvis, blabels)
+        terms['fused_id'] = self.xent(res['score_fused'], target)
+        terms['fused_tri'] = self.fused_triplet(res['fused'], target, f_bank)
 
         attn_target, present = attention_targets(masks, res['grid'])
-        p_lse, v_lse = part_embeddings_for_lse(res['z0'], res['zparts'], present)
-        terms['part_tri'] = self.part_triplet(p_lse, v_lse, target, p_bank)
-
-        text_b = text_all[target]
-        supcon_terms = []
-        for s_ in range(S):
-            keep = erase[:, s_] if s_ == 0 else present[:, s_ - 1] & erase[:, s_]
-            if keep.sum() < 2:
-                continue
-            z_s, t_s, tgt = res['z'][keep, s_].float(), text_b[keep, s_], target[keep]
-            supcon_terms.append(supcon(z_s, t_s, tgt, tgt) + supcon(t_s, z_s, tgt, tgt))
-        terms['supcon'] = sum(supcon_terms) / len(supcon_terms) if supcon_terms else res['z'].sum() * 0
-
         part_id = [self.xent(res['score_parts'][present[:, k], k], target[present[:, k]]) for k in range(K) if present[:, k].any()]
-        terms['part_id'] = sum(part_id) / len(part_id) if part_id else res['z'].sum() * 0
+        terms['part_id'] = sum(part_id) / len(part_id) if part_id else res['h'].sum() * 0
+        terms['part_tri'] = self.part_triplet(res['h'], present, target, p_bank)
+        terms['part_indiv'] = self.part_indiv(res['h'], present, target, p_bank)
+        terms['align'], align_acc = self.part_prompt_contrast(res['h'], present, target, text_all, erase, text_adapters)
+        terms['align_acc'] = align_acc.mean()
+        terms.update({f'align_acc_{name}': align_acc[k] for k, name in enumerate(PART_NAMES)})
 
         attn = res['attn'][:, 1:].float().clamp(min=1e-8)
         kl = (attn_target * (attn_target.clamp(min=1e-8).log() - attn.log())).sum(-1)
@@ -605,49 +693,70 @@ class Stage2Loss(nn.Module):
         terms['vis'] = F.binary_cross_entropy_with_logits(res['vis_logit'], present.float())
 
         total = (ID_W * terms['id'] + TRI_W * terms['tri'] + I2T_W * terms['i2t']
-                 + LPIM_ID_W * terms['lpim_id'] + LPIM_TRI_W * terms['lpim_tri'] + PART_TRI_W * terms['part_tri']
-                 + PART_ID_W * terms['part_id'] + SUPCON_W * terms['supcon'] + ATTN_W * terms['attn'] + VIS_W * terms['vis'])
+                 + FUSED_ID_W * terms['fused_id'] + FUSED_TRI_W * terms['fused_tri'] + PART_ID_W * terms['part_id']
+                 + PART_TRI_W * terms['part_tri'] + PART_INDIV_TRI_W * terms['part_indiv'] + PART_ALIGN_W * terms['align']
+                 + ATTN_W * terms['attn'] + VIS_W * terms['vis'])
         return total, terms
 
 
 # ----------------------------------------------------------------------------- evaluation
 @torch.no_grad()
 def extract(model, loader):
+    """Test-time vectors. Visibility = the model's own prediction (no mask needed); the invisible part blocks are zeroed
+    and the visibility travels with them (`vis`: bool, or probability * (p > 0.5) with EVAL_SOFT_VIS)."""
     model.eval()
-    feats = {k: [] for k in ['gap4', 'g', 'z0', 'pbar', 'zparts', 'vis']}
+    feats = {k: [] for k in ['gap4', 'g', 'fused', 'h', 'vis']}
     pids, camids = [], []
     for img, pid, camid, _, _, _ in loader:
         res = model(img.to(DEVICE))
-        for k in ['gap4', 'g', 'z0', 'pbar', 'zparts']:
+        prob = res['vis_logit'].sigmoid()
+        vis = prob > 0.5
+        for k in ['gap4', 'g', 'fused']:
             feats[k].append(res[k].float().cpu())
-        feats['vis'].append((res['vis_logit'] > 0).cpu())
+        feats['h'].append((res['h'].float() * vis[..., None]).cpu())
+        feats['vis'].append((prob * vis if EVAL_SOFT_VIS else vis).cpu())
         pids.extend(np.asarray(pid))
         camids.extend(np.asarray(camid))
     return {k: torch.cat(v) for k, v in feats.items()}, np.asarray(pids), np.asarray(camids)
 
 
 @torch.no_grad()
-def part_lse_distmat(qp, qv, gp, gv, gamma=LSE_GAMMA, chunk=EVAL_CHUNK):
-    """Part-based query-gallery distance 1 - S_final, S_final = 1 - (1/gamma) ln sum_k w_k e^{gamma d_k}.
-    Returns distmat [Nq,Ng] (no shared part -> max + 1), unmatched-part counts [Nq,Ng], shared mask [Nq,Ng]."""
+def part_distmats(qp, qv, gp, gv, gamma=LSE_GAMMA, chunk=EVAL_CHUNK):
+    """Part matching, per-part cosine distances combined over the parts visible in BOTH images (qp [Nq,K,d], qv [Nq,K]).
+    Returns (mean [Nq,Ng], LSE worst-part [Nq,Ng], shared-part count [Nq,Ng]); entries without a shared part are
+    meaningless (-1) and are replaced by the caller's global-distance fallback."""
     qp, qv = qp.to(DEVICE), qv.to(DEVICE)
-    D, unmatched, valid = [], [], []
+    mean, lse, shared = [], [], []
     for i in range(0, gp.shape[0], chunk):
         d, M = part_pairwise_distances(qp, qv, gp[i:i + chunk].to(DEVICE), gv[i:i + chunk].to(DEVICE))
-        Dc, vc, uc = lse_combine(d, M, gamma)
-        D.append(Dc.cpu()); valid.append(vc.cpu()); unmatched.append(uc.cpu())
-    D, valid, unmatched = torch.cat(D, 1), torch.cat(valid, 1), torch.cat(unmatched, 1)
-    D[~valid] = D[valid].max() + 1
-    return D.numpy(), unmatched.numpy(), valid.numpy()
+        mean.append(lse_combine(d, M, 0.0)[0].cpu())
+        lse.append(lse_combine(d, M, gamma)[0].cpu())
+        shared.append(M.sum(0).cpu())
+    return torch.cat(mean, 1).numpy(), torch.cat(lse, 1).numpy(), torch.cat(shared, 1).numpy()
+
+
+@torch.no_grad()
+def single_part_distmat(qh, qv, gh, gv, k, chunk=EVAL_CHUNK):
+    """Cosine distance of part k alone; pairs where either image does not show it rank last (max + 1)."""
+    qk = F.normalize(qh[:, k].to(DEVICE).float(), dim=-1)
+    qvk = (qv[:, k] > 0).to(DEVICE)
+    dist, ok = [], []
+    for i in range(0, gh.shape[0], chunk):
+        gk = F.normalize(gh[i:i + chunk, k].to(DEVICE).float(), dim=-1)
+        dist.append((1 - qk @ gk.t()).cpu())
+        ok.append((qvk[:, None] & (gv[i:i + chunk, k] > 0).to(DEVICE)[None]).cpu())
+    D, valid = torch.cat(dist, 1), torch.cat(ok, 1)
+    D[~valid] = (D[valid].max() + 1) if valid.any() else 1.0
+    return D.numpy()
 
 
 @torch.no_grad()
 def part_lse_all_pairs(p, v, gamma=LSE_GAMMA, chunk=RERANK_CHUNK, device=None):
-    """All-pairs part distance over query+gallery: [N, N] float16, same metric as part_lse_distmat.
+    """All-pairs part distance over query+gallery: [N, N] float16, same metric as part_distmats' LSE.
 
     re_ranking adds `local_distmat` to its own all-pairs `original_dist` *before* the k-reciprocal
     neighbourhood is built, so the local matrix has to span query+gallery, not the [Nq, Ng] block that
-    part_lse_distmat returns. Pairs with no mutually visible part get max + 1, as there. float16 and no
+    part_distmats returns. Pairs with no mutually visible part get max + 1, as there. float16 and no
     unmatched/valid bookkeeping: on Market N = 19,281, so each [N, N] float32 array costs 1.5 GB.
     """
     device = device or RERANK_DEVICE or DEVICE
@@ -669,22 +778,21 @@ def rerank_rows(feats, num_query, global_dist, logger):
 
     `<feature>_rr` is re_ranking on the chosen retrieval vector. `<feature>_rr_lse` passes the all-pairs part
     distance as `local_distmat`, so the Jaccard neighbourhood is built from the global *and* the part-visibility
-    distance instead of fusing two finished rankings (which is what FUSE_W does). The local matrix is rescaled to
-    the mean of the global one first: re_ranking sums the two raw matrices and only normalises afterwards, while
-    the global side is a squared euclidean on unit vectors (0..4) and the part side is 1 - cos (0..2);
-    `global_dist` is the row's own [Nq, Ng] distmat, already computed by evaluate().
+    distance instead of fusing two finished rankings. re_ranking sums the two raw matrices and only normalises
+    afterwards, and its own distance is a squared euclidean on unit vectors (= 2 x the cosine distance of
+    `global_dist`), so the local matrix is rescaled to that mean first. `global_dist` is the row's own [Nq, Ng]
+    cosine distmat, already computed by evaluate().
     """
-    vec = {'clipreid_baseline': lambda f: F.normalize(torch.cat([f['gap4'], f['g']], dim=1), dim=1),
-           'lpim': lambda f: concat_feature(f['z0'], f['pbar']),
-           'holistic': lambda f: concat_feature(f['gap4'], f['g'], f['z0'], f['pbar'])}[RERANK_FEATURE](feats)
+    vec = {'clipreid_global': lambda f: F.normalize(torch.cat([f['gap4'], f['g']], dim=1), dim=1),
+           'parts_selfattn': lambda f: F.normalize(f['fused'], dim=1),
+           'holistic': lambda f: concat_feature(f['gap4'], f['g'], f['fused'])}[RERANK_FEATURE](feats)
     device = RERANK_DEVICE or DEVICE
     qf, gf = vec[:num_query].to(device), vec[num_query:].to(device)
     rows, start = {}, time.time()
     rows[f'{RERANK_FEATURE}_rr'] = re_ranking(qf, gf, RERANK_K1, RERANK_K2, RERANK_LAMBDA)
 
-    p, v = part_embeddings_for_lse(feats['z0'], feats['zparts'], feats['vis'])
-    d_lse = part_lse_all_pairs(p, v)
-    scale = RERANK_LOCAL_W * float(global_dist.mean()) / float(d_lse.astype(np.float32).mean())
+    d_lse = part_lse_all_pairs(feats['h'], feats['vis'])
+    scale = RERANK_LOCAL_W * 2 * float(global_dist.mean()) / float(d_lse.astype(np.float32).mean())
     local = d_lse.astype(np.float32) * scale
     del d_lse                                     # every [N,N] float32 array is 1.5 GB on Market
     rows[f'{RERANK_FEATURE}_rr_lse'] = re_ranking(qf, gf, RERANK_K1, RERANK_K2, RERANK_LAMBDA, local_distmat=local)
@@ -700,45 +808,76 @@ def rerank_rows(feats, num_query, global_dist, logger):
 
 def concat_feature(*slots):
     """Slots concatenated into one retrieval vector. With EVAL_SLOTWISE_NORM each slot is L2-normalised first so
-    all slots weigh equally (concatenating then normalising once - CLIP-ReID's convention - weights slots by norm:
-    measured at init the global slot carried ~9% of the distance against five parts). Normalised once at the end."""
+    all slots weigh equally (concatenating then normalising once - CLIP-ReID's convention - weights slots by norm).
+    Normalised once at the end."""
     if EVAL_SLOTWISE_NORM:
         slots = [F.normalize(x, dim=-1) for x in slots]
     return F.normalize(torch.cat(slots, dim=1), dim=1)
 
 
-def evaluate(model, val_loader, num_query, logger, tag, rerank=False):
+def evaluate(model, val_loader, num_query, logger, tag, rerank=False, out_json=None):
+    """Rows (all cosine distances, so combinations add directly):
+      clipreid_global    cat(gap4, g), CLIP-ReID's own feature
+      parts_selfattn     the self-attended fused vector
+      parts_matching     per-part cosine over the parts visible in both images, mean (BPBreID); fewer than
+                         MIN_SHARED_PARTS shared -> global distance. parts_matching_lse: worst-part (LSE) version
+      holistic           cat(gap4, g, fused) as one vector
+      global+parts, global+parts_lse, all    clipreid_global + w * the matching rows (+ the self-attended row); every
+                         distance is divided by its own mean first, so the weights compare like with like
+      part_<name>        each part alone (pairs where both images show it)
+    """
     f, pids, camids = extract(model, val_loader)
     q, gal = slice(0, num_query), slice(num_query, None)
     q_pids, g_pids, q_cams, g_cams = pids[q], pids[gal], camids[q], camids[gal]
+    summary, base = {}, {}
 
     def dist(vec):
-        return euclidean_distance(vec[q].to(DEVICE), vec[gal].to(DEVICE))
+        v = F.normalize(vec, dim=1)
+        return (1 - v[q].to(DEVICE) @ v[gal].to(DEVICE).t()).cpu().numpy()
 
-    results = {
-        'clipreid_baseline': dist(F.normalize(torch.cat([f['gap4'], f['g']], dim=1), dim=1)),
-        'lpim': dist(concat_feature(f['z0'], f['pbar'])),
-        'holistic': dist(concat_feature(f['gap4'], f['g'], f['z0'], f['pbar'])),
-    }
-    p_lse, v_lse = part_embeddings_for_lse(f['z0'], f['zparts'], f['vis'])
-    d_lse, unmatched, shared = part_lse_distmat(p_lse[q], v_lse[q], p_lse[gal], v_lse[gal])
-    results['part_lse'] = d_lse
-    if FUSE_W > 0:
-        results['fused'] = results['holistic'] / results['holistic'].mean() + FUSE_W * d_lse / d_lse.mean()
-    if rerank:
-        results.update(rerank_rows(f, num_query, results[RERANK_FEATURE], logger))
+    def score(name, distmat):
+        cmc, mAP = eval_func(distmat, q_pids, g_pids, q_cams, g_cams)
+        summary[name] = dict(mAP=mAP, R1=cmc[0], R5=cmc[4], R10=cmc[9])
+        logger.info('[{:22s}] mAP: {:.1%}  Rank-1: {:.1%}  Rank-5: {:.1%}  Rank-10: {:.1%}'.format(name, mAP, cmc[0], cmc[4], cmc[9]))
+
+    d_global = dist(torch.cat([f['gap4'], f['g']], dim=1))
+    d_self = dist(f['fused'])
+    d_mean, d_lse, n_shared = part_distmats(f['h'][q], f['vis'][q], f['h'][gal], f['vis'][gal])
+    valid = n_shared >= MIN_SHARED_PARTS
+    fb = float(d_mean[valid].mean() / d_global[valid].mean()) if valid.any() else 1.0   # global fallback, rescaled to the part scale
+    fb_lse = float(d_lse[valid].mean() / d_global[valid].mean()) if valid.any() else 1.0
+    d_parts, d_parts_lse = np.where(valid, d_mean, d_global * fb), np.where(valid, d_lse, d_global * fb_lse)
 
     logger.info(f'Validation Results - {tag}')
     logger.info('invisible rate per part | query: {} | gallery: {}'.format(
-        dict(zip(PART_NAMES, (1 - f['vis'][q].float().mean(0)).numpy().round(3).tolist())),
-        dict(zip(PART_NAMES, (1 - f['vis'][gal].float().mean(0)).numpy().round(3).tolist()))))
-    logger.info('query-gallery pairs with >=1 unmatched part: {:.1%} | with no shared part: {:.2%} | mean unmatched parts: {:.2f}'.format(
-        (unmatched > 0).mean(), (~shared).mean(), unmatched.mean()))
-    summary = {}
-    for name, distmat in results.items():
-        cmc, mAP = eval_func(distmat, q_pids, g_pids, q_cams, g_cams)
-        summary[name] = dict(mAP=mAP, R1=cmc[0], R5=cmc[4], R10=cmc[9])
-        logger.info('[{:17s}] mAP: {:.1%}  Rank-1: {:.1%}  Rank-5: {:.1%}  Rank-10: {:.1%}'.format(name, mAP, cmc[0], cmc[4], cmc[9]))
+        dict(zip(PART_NAMES, (1 - (f['vis'][q] > 0).float().mean(0)).numpy().round(3).tolist())),
+        dict(zip(PART_NAMES, (1 - (f['vis'][gal] > 0).float().mean(0)).numpy().round(3).tolist()))))
+    logger.info('query-gallery pairs with >=1 unmatched part: {:.1%} | with < {} shared parts (global fallback): {:.2%} | '
+                'mean unmatched parts: {:.2f}'.format((n_shared < K).mean(), MIN_SHARED_PARTS, (~valid).mean(), (K - n_shared).mean()))
+    score('clipreid_global', d_global)
+    score('parts_selfattn', d_self)
+    score('parts_matching', d_parts)
+    score('parts_matching_lse', d_parts_lse)
+    d_hol = dist(concat_feature(f['gap4'], f['g'], f['fused']))
+    score('holistic', d_hol)
+    def unit(d):
+        return d / d.mean()                       # mean-ratio: every distance has mean 1 before the weights apply
+    ug, us, up, upl = unit(d_global), unit(d_self), unit(d_parts), unit(d_parts_lse)
+    score('global+parts', ug + EVAL_W_PARTS * up)
+    score('global+parts_lse', ug + EVAL_W_PARTS * upl)
+    score('all', ug + EVAL_W_SELF * us + EVAL_W_PARTS * up)
+    del d_mean, d_lse, d_parts, d_parts_lse, up, upl
+    if EVAL_PART_ROWS:
+        for k, name in enumerate(PART_NAMES):
+            score(f'part_{name}', single_part_distmat(f['h'][q], f['vis'][q], f['h'][gal], f['vis'][gal], k))
+    if rerank:
+        ref = {'clipreid_global': d_global, 'parts_selfattn': d_self, 'holistic': d_hol}[RERANK_FEATURE]
+        for name, distmat in rerank_rows(f, num_query, ref, logger).items():
+            score(name, distmat)
+    if out_json:
+        with open(out_json, 'w') as fh:
+            json.dump(dict(tag=tag, rows=summary), fh, indent=1, default=float)
+        logger.info(f'results written to {out_json}')
     torch.cuda.empty_cache()
     return summary
 
@@ -788,8 +927,10 @@ def make_optimizer(model):
 def save_checkpoint(model, optimizer, scheduler, epoch, path):
     torch.save({'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler.state_dict(),
                 'epoch': epoch, 'knobs': dict(H=H, W=W, STRIDE=STRIDE, BACKBONE=BACKBONE, LSE_GAMMA=LSE_GAMMA,
-                                              LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, PART_NAMES=PART_NAMES, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
-                                              BANK_SIZE=BANK_SIZE, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM)}, path)
+                                              PART_NAMES=PART_NAMES, MIM_SELF_LAYERS=MIM_SELF_LAYERS, PART_DIM=PART_DIM,
+                                              FUSED_DIM=FUSED_DIM, FUSE_LAYERS=FUSE_LAYERS, FUSE_DETACH=FUSE_DETACH,
+                                              LPIM_LEARN_QUERY=LPIM_LEARN_QUERY, BANK_SIZE=BANK_SIZE,
+                                              EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM)}, path)
 
 
 # ----------------------------------------------------------------------------- stage 2
@@ -813,16 +954,18 @@ def update_hard_sampler(epoch, model, criterion, train_loader, stats_loader, log
 
 def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logger, start_epoch=1, resume=None,
                     stats_loader=None):
-    """processor_clipreid_stage2.py:73-137 with the part losses and the two-distance evaluation."""
+    """processor_clipreid_stage2.py:73-137 with the part losses and the global / self-attended / part-matching evaluation."""
     optimizer = make_optimizer(model)
     scheduler = WarmupMultiStepLR(optimizer, STEPS, GAMMA, WARMUP_FACTOR, WARMUP_ITERS, WARMUP_METHOD)
     if resume is not None:
         optimizer.load_state_dict(resume['optimizer'])
         scheduler.load_state_dict(resume['scheduler'])
     scaler = amp.GradScaler(enabled=USE_AMP)
-    meters = {k: AverageMeter() for k in ['loss', 'id', 'tri', 'i2t', 'lpim_id', 'lpim_tri', 'part_tri', 'part_id', 'supcon', 'attn', 'vis', 'vis_acc', 'acc']}
+    meters = {k: AverageMeter() for k in ['loss', 'id', 'tri', 'i2t', 'fused_id', 'fused_tri', 'part_id', 'part_tri', 'part_indiv',
+                                          'align', 'align_acc', 'attn', 'vis', 'vis_acc', 'acc']
+              + [f'align_acc_{n}' for n in PART_NAMES]}
     best = {}
-    feat_bank = FeatureBank(BANK_SIZE, model.lpim.c_proj.out_features, K, DEVICE) if BANK_SIZE > 0 else None
+    feat_bank = FeatureBank(BANK_SIZE, FUSED_DIM, K, DEVICE, part_dim=PART_DIM) if BANK_SIZE > 0 else None
     if feat_bank is not None:
         logger.info(f'cross-batch memory for triplet mining: {BANK_SIZE} slots, used from epoch {BANK_START_EPOCH}')
     all_start = time.monotonic()
@@ -842,9 +985,10 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
             present = attention_targets(masks, GRID)[1]
             with amp.autocast(enabled=USE_AMP):
                 res = model(img, present)
-                loss, terms = criterion(res, masks, target, feat_bank.get() if use_bank else None)
+                assert tuple(res['grid']) == GRID, f"x4 grid {tuple(res['grid'])} != GRID {GRID}: visibility/attention targets use GRID"
+                loss, terms = criterion(res, masks, target, feat_bank.get() if use_bank else None, model.text_adapters)
             if feat_bank is not None:
-                feat_bank.add(res['z0'], res['zparts'], res['vis_logit'] > 0, target)
+                feat_bank.add(res['fused'], res['h'], present, target)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -856,21 +1000,24 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
                 meters[k].update(v.item(), img.shape[0])
             if (n_iter + 1) % LOG_PERIOD == 0:
                 m = {k: v.avg for k, v in meters.items()}
-                logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f} (id {:.3f} tri {:.3f} i2t {:.3f} | lpim_id {:.3f} lpim_tri {:.3f} '
-                            'part_tri {:.3f} part_id {:.3f} supcon {:.3f} attn {:.3f} vis {:.3f} vis_acc {:.3f}) Acc: {:.3f}, Base Lr: {:.2e}, LSE gamma: {:.2f}'
-                            .format(epoch, n_iter + 1, len(train_loader), m['loss'], m['id'], m['tri'], m['i2t'], m['lpim_id'],
-                                    m['lpim_tri'], m['part_tri'], m['part_id'], m['supcon'], m['attn'], m['vis'], m['vis_acc'], m['acc'],
-                                    scheduler.get_lr()[0], criterion.part_triplet.gamma))
+                logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f} (id {:.3f} tri {:.3f} i2t {:.3f} | fused_id {:.3f} fused_tri {:.3f} | '
+                            'part_id {:.3f} part_tri {:.3f} part_indiv {:.3f} align {:.3f} (top1 {:.3f}) attn {:.3f} vis {:.3f} vis_acc {:.3f}) '
+                            'Acc: {:.3f}, Base Lr: {:.2e}, LSE gamma: {:.2f}'
+                            .format(epoch, n_iter + 1, len(train_loader), m['loss'], m['id'], m['tri'], m['i2t'], m['fused_id'],
+                                    m['fused_tri'], m['part_id'], m['part_tri'], m['part_indiv'], m['align'], m['align_acc'],
+                                    m['attn'], m['vis'], m['vis_acc'], m['acc'], scheduler.get_lr()[0], criterion.part_triplet.gamma))
         time_per_batch = (time.time() - start) / (n_iter + 1)
-        logger.info('Epoch {} done. Loss: {:.3f} Time per batch: {:.3f}[s] Speed: {:.1f}[samples/s]'
-                    .format(epoch, meters['loss'].avg, time_per_batch, train_loader.batch_size / time_per_batch))
+        logger.info('Epoch {} done. Loss: {:.3f} Time per batch: {:.3f}[s] Speed: {:.1f}[samples/s] | part<->prompt top-1 {}'
+                    .format(epoch, meters['loss'].avg, time_per_batch, train_loader.batch_size / time_per_batch,
+                            {n: round(meters[f'align_acc_{n}'].avg, 3) for n in PART_NAMES}))
         if epoch % CHECKPOINT_PERIOD == 0 or epoch == MAX_EPOCHS:
             path = os.path.join(OUTPUT_DIR, f'{BACKBONE}_part_stage2_{epoch}.pth')
             save_checkpoint(model, optimizer, scheduler, epoch, path)
             logger.info(f'saved {path}')
         if epoch % EVAL_PERIOD == 0 or epoch == MAX_EPOCHS:
             summary = evaluate(model, val_loader, num_query, logger, f'Epoch: {epoch}',
-                               rerank=RERANK and (RERANK_EVERY_EVAL or epoch == MAX_EPOCHS))
+                               rerank=RERANK and (RERANK_EVERY_EVAL or epoch == MAX_EPOCHS),
+                               out_json=os.path.join(OUTPUT_DIR, f'results_epoch{epoch}.json'))
             for name, m in summary.items():
                 if m['mAP'] > best.get(name, {'mAP': -1})['mAP']:
                     best[name] = dict(epoch=epoch, **m)
@@ -881,7 +1028,8 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
 
 def main():
     global MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD, TEXT_ERASE_PROB, TEXT_DROPOUT, DATASET, OUTPUT_DIR
-    global HARD_SAMPLING, HARD_FRAC, NBR_K, HARD_START_EPOCH, NBR_REFRESH, PART_ID_W
+    global HARD_SAMPLING, HARD_FRAC, NBR_K, HARD_START_EPOCH, NBR_REFRESH, PART_ID_W, PART_INDIV_TRI_W, PART_ALIGN_W
+    global CROSS_PART_NEG, FUSE_DETACH, EVAL_W_SELF, EVAL_W_PARTS
     global MASKS_VARIANT, MASKS_DIR
     global RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2, RERANK_LAMBDA, RERANK_LOCAL_W
     global RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE
@@ -906,9 +1054,15 @@ def main():
     parser.add_argument('--nbr-k', type=int, default=NBR_K)
     parser.add_argument('--hard-start-epoch', type=int, default=HARD_START_EPOCH)
     parser.add_argument('--nbr-refresh', type=int, default=NBR_REFRESH, help='0 = keep the stage-1 prompt table')
-    parser.add_argument('--part-id-w', type=float, default=PART_ID_W)
+    parser.add_argument('--part-id-w', type=float, default=PART_ID_W, help='0 = BPBreID GiLt (no per-part ID loss)')
+    parser.add_argument('--part-indiv-w', type=float, default=PART_INDIV_TRI_W, help='per-part individual triplet weight (0 = off)')
+    parser.add_argument('--part-align-w', type=float, default=PART_ALIGN_W, help='part<->prompt contrast weight (0 = off)')
+    parser.add_argument('--no-cross-part-neg', action='store_true', help='ablation: other parts\' prompts are not negatives')
+    parser.add_argument('--no-fuse-detach', action='store_true', help='ablation: let the fused loss reach the part tokens')
+    parser.add_argument('--eval-w-self', type=float, default=EVAL_W_SELF)
+    parser.add_argument('--eval-w-parts', type=float, default=EVAL_W_PARTS)
     parser.add_argument('--rerank', action='store_true', help='k-reciprocal re-ranking rows (test-time only)')
-    parser.add_argument('--rerank-feature', choices=['holistic', 'lpim', 'clipreid_baseline'], default=RERANK_FEATURE)
+    parser.add_argument('--rerank-feature', choices=['holistic', 'parts_selfattn', 'clipreid_global'], default=RERANK_FEATURE)
     parser.add_argument('--rerank-k1', type=int, default=RERANK_K1)
     parser.add_argument('--rerank-k2', type=int, default=RERANK_K2)
     parser.add_argument('--rerank-lambda', type=float, default=RERANK_LAMBDA)
@@ -923,7 +1077,9 @@ def main():
     MASKS_VARIANT, MASKS_DIR = args.masks_variant, args.masks_dir
     TEXT_ERASE_PROB, TEXT_DROPOUT = args.text_erase_prob, args.text_dropout
     HARD_SAMPLING, HARD_FRAC, NBR_K, HARD_START_EPOCH = args.hard_sampling, args.hard_frac, args.nbr_k, args.hard_start_epoch
-    NBR_REFRESH, PART_ID_W = args.nbr_refresh, args.part_id_w
+    NBR_REFRESH, PART_ID_W, PART_INDIV_TRI_W, PART_ALIGN_W = args.nbr_refresh, args.part_id_w, args.part_indiv_w, args.part_align_w
+    CROSS_PART_NEG, FUSE_DETACH = CROSS_PART_NEG and not args.no_cross_part_neg, FUSE_DETACH and not args.no_fuse_detach
+    EVAL_W_SELF, EVAL_W_PARTS = args.eval_w_self, args.eval_w_parts
     RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2 = args.rerank, args.rerank_feature, args.rerank_k1, args.rerank_k2
     RERANK_LAMBDA, RERANK_LOCAL_W = args.rerank_lambda, args.rerank_local_w
     RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE = args.rerank_only_local, args.rerank_every_eval, args.rerank_device
@@ -934,10 +1090,13 @@ def main():
     logger = setup_logger('transreid', OUTPUT_DIR, if_train=not args.eval_only)
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
         DATASET=DATASET, MASKS_VARIANT=MASKS_VARIANT, MASKS_DIR=MASKS_DIR, H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
-        STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, LPIM_ID_W=LPIM_ID_W, LPIM_TRI_W=LPIM_TRI_W, PART_TRI_W=PART_TRI_W,
-        PART_ID_W=PART_ID_W, SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, TEXT_ERASE_PROB=TEXT_ERASE_PROB, TEXT_DROPOUT=TEXT_DROPOUT, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
-        MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
+        STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, FUSED_ID_W=FUSED_ID_W, FUSED_TRI_W=FUSED_TRI_W, PART_ID_W=PART_ID_W,
+        PART_TRI_W=PART_TRI_W, PART_INDIV_TRI_W=PART_INDIV_TRI_W, PART_ALIGN_W=PART_ALIGN_W, ATTN_W=ATTN_W, VIS_W=VIS_W,
+        PART_DIM=PART_DIM, FUSED_DIM=FUSED_DIM, FUSE_LAYERS=FUSE_LAYERS, FUSE_DETACH=FUSE_DETACH, CROSS_PART_NEG=CROSS_PART_NEG,
+        LPIM_LEARN_QUERY=LPIM_LEARN_QUERY, TEXT_ERASE_PROB=TEXT_ERASE_PROB, TEXT_DROPOUT=TEXT_DROPOUT,
+        LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS, MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, USE_AMP=USE_AMP,
         BANK_SIZE=BANK_SIZE, BANK_START_EPOCH=BANK_START_EPOCH, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM,
+        EVAL_W_SELF=EVAL_W_SELF, EVAL_W_PARTS=EVAL_W_PARTS, MIN_SHARED_PARTS=MIN_SHARED_PARTS, EVAL_SOFT_VIS=EVAL_SOFT_VIS,
         RERANK=RERANK, RERANK_FEATURE=RERANK_FEATURE, RERANK_K1=RERANK_K1, RERANK_K2=RERANK_K2,
         RERANK_LAMBDA=RERANK_LAMBDA, RERANK_LOCAL_W=RERANK_LOCAL_W, RERANK_ONLY_LOCAL=RERANK_ONLY_LOCAL,
         RERANK_EVERY_EVAL=RERANK_EVERY_EVAL, HARD_SAMPLING=HARD_SAMPLING, HARD_FRAC=HARD_FRAC, NBR_K=NBR_K,
@@ -961,9 +1120,9 @@ def main():
 
     if args.eval_only:
         ckpt = torch.load(args.weights, map_location=DEVICE)
-        missing = model.load_state_dict(ckpt['model'], strict=False)       # older checkpoints lack the per-part ID heads
-        logger.info(f'checkpoint keys missing: {missing.missing_keys} unexpected: {missing.unexpected_keys}')
-        evaluate(model, val_loader, num_query, logger, f"{args.weights} (epoch {ckpt['epoch']})", rerank=RERANK)
+        model.load_state_dict(ckpt['model'])
+        evaluate(model, val_loader, num_query, logger, f"{args.weights} (epoch {ckpt['epoch']})", rerank=RERANK,
+                 out_json=os.path.join(OUTPUT_DIR, 'results_eval.json'))
         return
 
     resume, start_epoch = None, 1

@@ -5,8 +5,9 @@ Run from the repo root:
 
 What comes out: one graph, one input `input` [-1, 3, 256, 128] and one output `reid_embedding` [-1, D], the same
 L2-normalised retrieval vector the stage-2 `evaluate` rows are built from (FEATURE selects the row). Nothing else
-from training is in the graph: no BNNeck heads (test features are the raw slots), no masks, no text encoder - the
-LPIM text queries are a frozen buffer, so their query projection folds into a constant.
+from training is in the graph: no BNNeck heads (test features are the raw slots), no masks, no text encoder, no text
+adapters - the LPIM text queries are a frozen buffer, so their query projection folds into a constant. Part visibility
+is the model's own prediction (visibility head > 0), also inside the fused vector's attention mask.
 
 Decisions that make the graph DeepStream/TensorRT-friendly (this is the whole point of the file):
   * Pixel normalisation is baked in (NORMALIZE_IN_GRAPH): the network takes raw RGB in [0, 255], so nvinfer runs
@@ -25,10 +26,11 @@ Decisions that make the graph DeepStream/TensorRT-friendly (this is the whole po
     cosine/L2 matcher is exact.
   * fp32 weights, opset ONNX_OPSET; precision (fp16/int8) is a TRT build flag, not an export flag.
 
-Not exportable, by construction: the `part_lse` eval row. It is a query-gallery distance over mutually visible
-parts (LSE soft-min), not an embedding, so no single-vector matcher can reproduce it. WITH_PARTS=True adds
-`part_embeddings` [-1, K, D] and `part_visibility` [-1, K] as extra outputs for a custom matcher; DeepStream's
-tracker ignores extra tensors, so leave it off unless something downstream consumes them.
+Not exportable, by construction: the `parts_matching*` eval rows. They are query-gallery distances over mutually
+visible parts, not embeddings, so no single-vector matcher can reproduce them. WITH_PARTS=True adds `part_embeddings`
+[-1, K, 256] (L2-normalised, invisible parts zeroed) and `part_visibility` [-1, K] as extra outputs for a custom
+matcher that averages the per-part cosine distances over the parts visible in both images; DeepStream's tracker
+ignores extra tensors, so leave it off unless something downstream consumes them.
 
   python deploy/export_stage2_onnx.py --weights <ckpt> --engine --fp16     # also builds .engine with trtexec
   python deploy/export_stage2_onnx.py --random-weights --engine            # graph/TRT check without a checkpoint
@@ -46,17 +48,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from processor.train_part_prompts_stage2 import PartCLIPReID, pool_parts, PIXEL_MEAN, PIXEL_STD, EVAL_SLOTWISE_NORM
+from processor.train_part_prompts_stage2 import PartCLIPReID, PIXEL_MEAN, PIXEL_STD, EVAL_SLOTWISE_NORM
 from processor.train_part_prompts_stage1 import PART_NAMES
 from model.make_model_clipreid import load_clip_to_cpu
 
 # ----------------------------------------------------------------------------- knobs
 OUT_DIR = './deploy/onnx'
 FEATURE = 'holistic'               # retrieval vector to export, = the stage-2 eval row of the same name:
-                                   #   'baseline' cat(gap4, g)             3072-d, CLIP-ReID's own test feature
-                                   #   'lpim'     cat(z0, pbar)            2048-d, the LPIM branch alone
-                                   #   'holistic' cat(gap4, g, z0, pbar)   5120-d, both branches (best row)
-WITH_PARTS = False                 # also output part_embeddings [-1,K,D] and part_visibility [-1,K] (sigmoid)
+                                   #   'global'   cat(gap4, g)             3072-d, CLIP-ReID's own test feature (`clipreid_global`)
+                                   #   'selfattn' fused                    1280-d, the self-attended part vector (`parts_selfattn`)
+                                   #   'holistic' cat(gap4, g, fused)      4352-d, global + fused (`holistic`)
+WITH_PARTS = False                 # also output part_embeddings [-1,K,256] and part_visibility [-1,K] (sigmoid)
 NORMALIZE_IN_GRAPH = True          # input is raw RGB 0..255; False expects the already-normalised tensor
 ONNX_OPSET = 17                    # TRT 8.5+ / DeepStream 6.2+; 16 for older DeepStream
 DYNAMIC_BATCH = True
@@ -66,7 +68,7 @@ ENGINE_COS = 0.999                 # min cosine(PyTorch fp32, TensorRT engine) a
 ATOL = 2e-4                        # max |exported - reference| accepted on the parity check
 SEED = 0
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-FEATURE_SLOTS = {'baseline': ('gap4', 'g'), 'lpim': ('z0', 'pbar'), 'holistic': ('gap4', 'g', 'z0', 'pbar')}
+FEATURE_SLOTS = {'global': ('gap4', 'g'), 'selfattn': ('fused',), 'holistic': ('gap4', 'g', 'fused')}
 
 
 # ----------------------------------------------------------------------------- export graph
@@ -93,7 +95,7 @@ class Stage2Embedder(nn.Module):
                  slotwise_norm=EVAL_SLOTWISE_NORM):
         super().__init__()
         assert feature in FEATURE_SLOTS, f'feature must be one of {list(FEATURE_SLOTS)}'
-        self.visual, self.lpim = model.visual, model.lpim
+        self.visual, self.lpim, self.fusion, self.part_proj = model.visual, model.lpim, model.fusion, model.part_proj
         self.feature, self.with_parts, self.slotwise_norm = feature, with_parts, slotwise_norm
         self.attnpool = model.visual.attnpool
         self.heads, self.dim_head = self.attnpool.num_heads, self.attnpool.k_proj.in_features // self.attnpool.num_heads
@@ -102,7 +104,7 @@ class Stage2Embedder(nn.Module):
         self.register_buffer('pixel_mean', torch.tensor(PIXEL_MEAN).view(1, 3, 1, 1) * 255)
         self.register_buffer('pixel_std', torch.tensor(PIXEL_STD).view(1, 3, 1, 1) * 255)
         with torch.no_grad():                       # LPIM queries are frozen -> q_proj(text_queries) is a constant
-            q = self.lpim.q_proj(self.lpim.text_queries.float())
+            q = self.lpim.q_proj(self.lpim.queries().float())
         self.register_buffer('lpim_q', q.view(q.shape[0], self.lpim.num_heads, -1).transpose(0, 1).contiguous())
 
     def attnpool_token0(self, x4):
@@ -133,10 +135,23 @@ class Stage2Embedder(nn.Module):
         z = z + m.ffn(m.norm(z))
         for layer in m.self_layers:
             z = layer(z)
-        parts = z[:, 1:]
-        vis_logit = m.vis_head(parts).squeeze(-1)
-        pbar, _ = pool_parts(parts, m.pool_w(parts).squeeze(-1), vis_logit > 0)       # visibility-masked, as in training
-        return z[:, 0], parts, pbar, vis_logit
+        return z, m.vis_head(z[:, 1:]).squeeze(-1)
+
+    def fuse(self, z, vis):
+        """PartFusion.forward with the CLS token and the always-visible mask built from tensors (no Shape ops)."""
+        f = self.fusion
+        x = torch.cat([torch.zeros_like(z[:, :1]) + f.cls, z + f.slot_embed], dim=1)
+        always = vis[:, :1] | ~vis[:, :1]                                              # [N,1] True, batch-shaped without Shape ops
+        keep = torch.cat([always, always, vis], dim=1)
+        for layer in f.layers:
+            x = layer(x, src_key_padding_mask=~keep)
+        return f.out(f.norm(x[:, 0]))
+
+    def parts_forward(self, x4):
+        """z, per-part 256-d heads h [N,K,256], fused vector, visibility logits."""
+        z, vis_logit = self.lpim_forward(x4)
+        h = torch.stack([proj(z[:, 1 + k]) for k, proj in enumerate(self.part_proj)], dim=1)
+        return z, h, self.fuse(z, vis_logit > 0), vis_logit
 
     def forward(self, x):
         if self.normalize_in_graph:
@@ -144,14 +159,15 @@ class Stage2Embedder(nn.Module):
         x = self.visual.layer2(self.visual.layer1(self.visual.avgpool(self.stem(x))))
         x4 = self.visual.layer4(self.visual.layer3(x))
         gap4, g = x4.mean((2, 3)), self.attnpool_token0(x4)
-        z0, parts, pbar, vis_logit = self.lpim_forward(x4)
-        slots = dict(gap4=gap4, g=g, z0=z0, pbar=pbar)
+        z, h, fused, vis_logit = self.parts_forward(x4)
+        slots = dict(gap4=gap4, g=g, fused=fused)
         chosen = [slots[name] for name in FEATURE_SLOTS[self.feature]]
-        if self.slotwise_norm and self.feature != 'baseline':     # the baseline row normalises once, as CLIP-ReID does
+        if self.slotwise_norm and self.feature == 'holistic':     # the global row normalises once, as CLIP-ReID does
             chosen = [l2norm(s) for s in chosen]
         embedding = l2norm(torch.cat(chosen, dim=1))
         if self.with_parts:
-            return embedding, l2norm(parts), torch.sigmoid(vis_logit)
+            vis = vis_logit > 0
+            return embedding, l2norm(h) * vis[..., None].float(), torch.sigmoid(vis_logit)
         return embedding
 
     def stem(self, x):
@@ -175,12 +191,13 @@ def build_model(weights, random_weights, num_classes, logger=print):
     ckpt = torch.load(weights, map_location='cpu', weights_only=False)
     state, knobs = ckpt['model'], ckpt['knobs']
     assert knobs['BACKBONE'] == s2.BACKBONE, f"checkpoint backbone {knobs['BACKBONE']} != {s2.BACKBONE}"
-    s2.MIM_SELF_LAYERS = knobs['MIM_SELF_LAYERS']                  # the module list length must match the weights
+    for name in ['MIM_SELF_LAYERS', 'PART_DIM', 'FUSED_DIM', 'FUSE_LAYERS', 'LPIM_LEARN_QUERY']:
+        setattr(s2, name, knobs[name])                             # module shapes must match the weights
     num_classes = state['id_gap4.fc.weight'].shape[0]
     clip = load_clip_to_cpu(knobs['BACKBONE'], (knobs['H'] - 16) // knobs['STRIDE'] + 1,
                             (knobs['W'] - 16) // knobs['STRIDE'] + 1, knobs['STRIDE'])
     model = PartCLIPReID(clip.visual.float(), num_classes, state['lpim.text_queries'].float())
-    model.load_state_dict({k: v.float() for k, v in state.items()}, strict=False)   # old checkpoints lack id_parts (train-only)
+    model.load_state_dict({k: v.float() for k, v in state.items()})
     logger(f"loaded {weights} (epoch {ckpt['epoch']}), {num_classes} classes, knobs: "
            + ', '.join(f'{k}={v}' for k, v in knobs.items()))
     return model.eval(), knobs
@@ -200,18 +217,18 @@ def check_against_reference(model, embedder, size, logger=print):
     ref = model(net_in)
     x4 = model.visual(net_in)[1]
     g = embedder.attnpool_token0(x4)
-    z0, parts, pbar, vis = embedder.lpim_forward(x4)
+    z, h, fused, vis = embedder.parts_forward(x4)
     diffs = {'g (attnpool token 0)': (g - ref['g']).abs().max().item(),
-             'z0': (z0 - ref['z0']).abs().max().item(),
-             'zparts': (parts - ref['zparts']).abs().max().item(),
-             'pbar': (pbar - ref['pbar']).abs().max().item(),
+             'z': (z - ref['z']).abs().max().item(),
+             'h': (h - ref['h']).abs().max().item(),
+             'fused': (fused - ref['fused']).abs().max().item(),
              'vis_logit': (vis - ref['vis_logit']).abs().max().item()}
     logger('rewritten blocks vs PartCLIPReID: ' + ', '.join(f'{k} {v:.2e}' for k, v in diffs.items()))
     assert max(diffs.values()) < ATOL, f'rewrite changes the features: {diffs}'
 
     slots = [ref[name] for name in FEATURE_SLOTS[embedder.feature]]
-    expected = (F.normalize(torch.cat(slots, dim=1), dim=1) if embedder.feature == 'baseline'
-                else concat_feature(*slots))                            # the eval row, from the training script
+    expected = (concat_feature(*slots) if embedder.feature == 'holistic'
+                else F.normalize(torch.cat(slots, dim=1), dim=1))      # the eval row, from the training script
     got = embedder(raw if embedder.normalize_in_graph else net_in)
     got = got[0] if isinstance(got, tuple) else got
     diff = (got - expected).abs().max().item()

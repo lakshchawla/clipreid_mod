@@ -1,191 +1,150 @@
-# Methodology: Part-Prompt CLIP-ReID with Language-Guided Part Interaction
+# Methodology: Part-Prompt CLIP-ReID with Per-Part Matching
 
-Backbone: CLIP RN50 (ModifiedResNet), input 256×128, stride 16 (feature grid 16×8). Primary dataset: Market-1501
-(751 train identities, 12,936 train images); MSMT17 and DukeMTMC-reID are registered in `datasets/part_datasets.py`.
-Code: `processor/train_part_prompts_stage1.py`, `processor/train_part_prompts_stage2.py`.
+Backbone: CLIP RN50 (ModifiedResNet), input 256×128, stride 16 (feature grid 16×8). Datasets: Market-1501 (751 train
+identities), DukeMTMC-reID, MSMT17 (`datasets/part_datasets.py`).
+Code: `processor/train_part_prompts_stage1.py`, `processor/train_part_prompts_stage2.py`, `deploy/export_stage2_onnx.py`.
 
 ## 1. Overview
 
-The method extends CLIP-ReID's two-stage recipe from one identity prompt to **K+1 = 6 identity prompts per person**:
-one global slot and five body-part slots (head, upper-arms/torso, lower-arms/torso, legs, feet).
+CLIP-ReID's single identity prompt becomes **K+1 = 6 prompts per identity**: one global slot and five body-part slots
+(head, upper-arms/torso, lower-arms/torso, legs, feet). The aim is that two people who differ in a single part (for
+example their shoes) are not matched, which a global average embedding cannot guarantee.
 
-- **Stage 1 (prompt learning).** CLIP's image and text encoders are frozen. Only per-(identity, slot) context
-  tokens are learned, by contrasting each slot's image embedding with its prompt. An auxiliary Text Attention
-  Block (TAB) adds an image-conditioned pooling of the prompt tokens.
-- **Stage 2 (image-side fine-tuning).** The learned prompts are frozen and encoded once into targets. The image
-  encoder is fine-tuned with the CLIP-ReID baseline losses plus a Language-Guided Part Interaction Module (LPIM)
-  that yields a global-semantic token and K part tokens. The retrieval feature is a holistic concatenation of the
-  baseline and LPIM features.
+- **Stage 1 (prompt learning).** CLIP's encoders are frozen. Only per-(identity, slot) context tokens are learned.
+- **Stage 2 (image-side fine-tuning).** Prompts are frozen. The image encoder is fine-tuned with the CLIP-ReID losses
+  plus a part branch that gives every part its own 256-d vector, its own ID/triplet/prompt-alignment losses, and a
+  visibility-aware matching rule.
 
-## 2. Part supervision: PifPaf masks (both stages)
+## 2. Part supervision: PifPaf masks
 
-1. PifPaf produces 36 confidence fields (17 keypoints + 19 joints) per image. They are pre-computed per image
-   (BPBreID `pifpaf_maskrcnn_filtering` variant).
-2. Fields are grouped into five vertical parts (BPBreID `five_v`), each as the clamped max over its members.
-   A background channel is set where no part reaches 0.5. A softmax with weight 15 over the six channels gives a
-   soft part distribution `[K+1, h, w]`.
-3. Visibility of part k = it wins the argmax at ≥ 1 grid location (BPBreID rule). The global slot is always visible.
-4. Stage 2 interpolates masks to 256×128 and applies the same flip, pad+crop and random erasing as the image.
-   Padded and erased regions become background.
+1. PifPaf gives 36 confidence fields per image (BPBreID `pifpaf_maskrcnn_filtering`, pre-computed per image).
+2. Fields are grouped into five vertical parts (BPBreID `five_v`, identical grouping) plus a background channel
+   (threshold 0.5); a softmax with weight 15 gives a soft part distribution.
+3. A part is **present** when it wins the argmax at ≥ 1 grid location (BPBreID rule).
+4. Stage 2 applies the same flip, pad+crop and random erasing to image and mask; erased/padded regions become background.
 
-## 3. Stage 1: per-part prompt learning
+## 3. Stage 1: per-part prompt learning (batch negatives only)
 
-### 3.1 Frozen image side (cached once)
+**Frozen image side (cached once):** slot 0 = `xproj[0]` (CLIP-ReID's global feature); slot k = `GWAP(x4, mask_k)` through
+a frozen `Linear(2048→1024)` equal to CLIP's attention-pool value/output projection.
 
-For every training image, with its mask:
-- Slot 0: `xproj[0]`, the stock CLIP-ReID global feature (1024-d).
-- Slot k: `GWAP(x4, mask_k)` followed by a frozen `Linear(2048→1024)` equal to CLIP's attention-pool value and
-  output projection, `W = c_proj·v_proj`. This is the attention pool with the attention weights replaced by the mask.
+**Text side:** one frozen CLIP text encoder; templates `A photo of a X X X X person.` and
+`A photo of the <part> of a X X X X person.`; learnable `cls_ctx[C, 6, 4, 512]` (4 context tokens per identity and slot).
 
-Features `[N, 6, 1024]` and visibility `[N, 6]` are cached, as in CLIP-ReID stage 1.
+**Loss per slot** (over batch images whose part is visible), CLIP-ReID's SupConLoss (raw dot product, temperature 1),
+both directions, **in-batch negatives only**. The earlier dataset-wide negative pool (all prompts / all images) was
+removed: it needed temperature, positive-set and bank-staleness patches and lowered accuracy.
 
-### 3.2 Text side
+**Cross-part negatives** (`CROSS_PART_NEG`): for a part slot, the same batch identities' prompts of the *other part
+slots* are extra negatives for the image (i2t), and the other parts' image embeddings are extra negatives for the prompt
+(t2i). The head prompt must prefer head evidence over torso/legs evidence. Part slots only; the global slot is excluded.
 
-- One frozen CLIP text encoder, shared across slots.
-- Templates: `A photo of a X X X X person.` and `A photo of the <part> of a X X X X person.`
-- Learnable parameters: `cls_ctx[C, 6, 4, 512]`, which is 4 context tokens for every (identity, slot), initialised
-  N(0, 0.02). On Market this is 751×6×4×512 ≈ 9.2M parameters. Slots differ by template words and by their own ctx.
-- The prompt feature is the EOT token state projected by `text_projection`.
+**Text Attention Block (TAB), one per slot:** the image is the query, the 77 token states of the slot's prompt are keys
+and values, `t_hat = t_eot + W_o·Attn(q, K, V)` with `W_o` zero-initialised (so it starts equal to the plain contrast).
+An auxiliary in-batch contrast (weight 0.5) scores image j against the prompt of every batch identity as conditioned
+by image j. Because TAB is per slot, part k's cross-attention only reads part k's prompt tokens. TAB is training-only:
+stage 2 consumes the plain EOT prompt vectors, so TAB can only help by making `cls_ctx` better under EOT pooling.
 
-### 3.3 Contrastive objective with full-pool negatives (`FULL_POOL_NEGATIVES`)
+**Optimisation:** Adam, lr 5e-4, weight decay 1e-4, 60 epochs, warmup-cosine, batch 64.
+**Diagnostics:** per-slot image→text top-1, TAB-conditioned top-1, and a cross-part confusion rate (how often a part
+image is closer to its own identity's prompt of another part).
 
-For each slot s, over the batch images with part s visible (images with the part invisible are dropped from that
-slot's loss), both directions are L2-normalised and scored at temperature 0.01:
+## 4. Stage 2: part-aware fine-tuning
 
-- **i2t:** each image against **all C identity prompts**. The prompt bank is detached and the in-batch identities are
-  spliced in with gradient. After each step the fresh prompts are written back into the bank. The whole bank is
-  rebuilt every epoch.
-- **t2i:** each in-batch prompt against **every dataset image visible in slot s** (static, since the image side is
-  frozen). Positives are the identity's in-batch images (CLIP-ReID's positive set). The identity's other images are
-  masked out of the softmax, so they are neither positives nor false negatives.
+### 4.1 Architecture
 
-Each slot is back-propagated on its own (same gradient, 1/6 of the memory).
+- **Baseline branch (CLIP-ReID verbatim):** `gap3 = GAP(x3)`, `gap4 = GAP(x4)`, `g = xproj[0]`, BNNeck ID heads, triplet
+  on all three, i2t `CE(g · text_global^T)`. Test feature `cat(gap4, g)`.
+- **LPIM (image-side cross-attention from prompts):** six identity-agnostic text queries (`A photo of the <part> of a
+  person.`) cross-attend over the x4 grid, K/V/output initialised from CLIP's attention pool. Pure cross-attention (parts
+  never mix) gives tokens `z0` (global-semantic) and `z1..z5` (1024-d). The part-k attention map is supervised by the
+  PifPaf mask (KL), and a visibility head per part token predicts presence, so no mask is needed at test time.
+- **Per-part heads:** `h_k = Linear_k(z_k)`, 256-d, each with its own BNNeck classifier. This is the part's retrieval vector.
+- **Text adapters:** `A_k: 1024→256` maps the frozen stage-1 prompts into part k's 256-d space (training only).
+- **Self-attended fused vector:** a learnable CLS token attends over `[z0, z1..z5]` (+ slot embedding) for one layer,
+  with the keys of invisible parts masked out, then `Linear(1024→1280)`. By default the part tokens enter detached
+  (`FUSE_DETACH`) so the fused loss cannot make a part token carry whole-body identity.
 
-### 3.3.1 Why batch positives
+### 4.2 Alignment of prompts and part vectors
 
-Averaging over all of an identity's ~17 images at a sharp temperature pulled prompts toward outlier images and did
-not converge.
+For each part k and each batch, the symmetric contrast is computed between `h_k` and `A_k(prompts of the batch
+identities)`. The positive is (own identity, part k). With `CROSS_PART_NEG`, the same identities' prompts of the other
+parts, seen through the same adapter, are negatives. So part 1's vector aligns with part 1's prompts only, in its own
+256-d space. Random text erasing (a prompt anchor dropped with p = 0.1) and text-dimension dropout keep the part
+vector able to stand on its own when its anchor, or the part itself, is missing.
 
-### 3.4 Text Attention Block (TAB, enabled)
+### 4.3 Where each loss acts
 
-TAB gives an image-conditioned pooling of the *same* prompt, using the token states that EOT pooling discards.
+| Loss | Acts on | Notes |
+|---|---|---|
+| ID, triplet on `gap3/gap4/g`; i2t on `g` | holistic | CLIP-ReID verbatim |
+| ID + triplet on fused vector | holistic over parts | triplet on the L2-normalised vector (it is retrieved by cosine); part tokens detached by default |
+| per-part ID on `h_k` (`PART_ID_W`) | part | visible parts only; BPBreID keeps this at 0, so it is ablated |
+| part triplet on `h_k` | part | batch-hard, visibility-masked mean distance, LSE worst-part ramp (epochs 40→80) |
+| per-part individual triplet (`PART_INDIV_TRI_W`) | part | each part mined on its own distance, both images show it |
+| part↔prompt contrast (`PART_ALIGN_W`) | part | §4.2 |
+| attention KL, visibility BCE | part | PifPaf masks as where-to-look and presence supervision |
 
-- Query: `W_q x_part` (the slot's image embedding). Keys and values: `W_k`, `W_v` of the 77 projected token states
-  of the slot's prompt. Tokens after EOT are masked. d = 256, 4 heads.
-- Output: `t_hat = t_eot + W_o · Attn(q, K, V)`, with `W_o` zero-initialised. TAB therefore starts as the identity
-  on the EOT prompt, and the first step equals the plain-EOT contrast.
-- It is trained with the same two-direction contrast against the same pools. Keys and values come from the bank,
-  with in-batch identities spliced in with gradient. The t2i side uses the batch positives plus 2,048 sampled
-  negative images, each column scored with the prompt as conditioned by that image.
-- Total slot loss: `L = L_i2t + L_t2i + 0.5 · L_TAB`.
-- TAB is used **only as a stage-1 auxiliary loss**. It cannot bypass the prompts, because template tokens are
-  identical across identities and every identity signal in K/V comes from `cls_ctx`. TAB can only help by making
-  `cls_ctx` better under EOT pooling. The pass/fail metric is the plain-EOT image→text top-1.
-  The TAB-conditioned top-1 is logged as a diagnostic.
+Batches can be built around confusable identities per part (`PartHardPKSampler`, `--hard-sampling`): an anchor identity
+and slot are drawn, half of the other identities come from the anchor's nearest identities in that slot (Jaccard +
+cosine ranking on the model's own prototypes, refreshed every 10 epochs, from epoch 10). No dataset-wide pool or
+memory is used (`BANK_SIZE = 0`).
 
-### 3.5 Optimisation
+### 4.4 Effect of part visibility on the embedding
 
-Adam, lr 5e-4, weight decay 1e-4, 60 epochs, warmup-cosine (5 warmup epochs, from 1e-5 to 1e-6), batch 64, seed 1234.
-Checkpoints store `cls_ctx`, TAB, optimiser and the knobs that stage 2 asserts against (H, W, stride, dataset, N_CTX).
-
-### 3.6 Stage-1 results (Market-1501, 60 epochs, training identities)
-
-Image→text top-1 per slot: global 0.958, head 0.816, upper-arms/torso 0.912, lower-arms/torso 0.962, legs 0.845,
-feet 0.682 (chance 0.0013). This is a train-set alignment metric. Head and feet are the weakest and have the most
-invisible parts (feet ~22–31% invisible at test).
-
-## 4. Stage 2: image-side fine-tuning
-
-### 4.1 Targets
-
-The stage-1 prompts are encoded once, frozen, into `text_all[C, 6, 1024]`. Only the EOT snapshot is used, not TAB.
-
-### 4.2 Baseline branch (CLIP-ReID stage 2, verbatim)
-
-`gap3 = GAP(x3)`, `gap4 = GAP(x4)` with a BNNeck ID head, and `g = xproj[0]` with a BNNeck ID head. The losses are
-label-smoothed ID CE on gap4 and g, batch-hard triplet (margin 0.3) on gap3, gap4 and g, and i2t
-`CE(g · text_global^T)`.
-
-### 4.3 LPIM branch (after PromptSG, CVPR'24)
-
-- Six identity-agnostic text queries (`A photo of a person.` and `A photo of the <part> of a person.`) go through the
-  frozen CLIP text encoder once. They cross-attend over the 128 x4 locations. K/V/output projections and the
-  positional embedding are initialised from CLIP's attention pool. `q_proj` is new, and a residual FFN with a
-  zero-initialised output follows. There is no query-to-query interaction by default.
-- Outputs: `z0` (global-semantic token) and `z1..zK` (part tokens).
-- `pbar` is the attentive pooling of the part tokens, `alpha = softmax(w·z_k)`, `pbar = Σ alpha_k z_k`.
-- A visibility head on each part token predicts presence, so no mask is needed at test time.
-- The head-averaged attention map of each part query is supervised by its PifPaf mask (KL, present parts only).
-
-### 4.4 Loss
-
-```
-L = 1·ID + 1·TRI + 1·i2t                       # CLIP-ReID baseline branch
-  + 1·LPIM_ID(z0, pbar) + 1·LPIM_TRI(z0, pbar) # BNNeck ID + triplet on LPIM outputs
-  + 1·PART_TRI(z1..zK)                         # visibility-masked LSE triplet
-  + 0.5·SUPCON                                 # per-slot symmetric SupCon(z_s, text_all[:, s])
-  + 1·ATTN_KL + 0.1·VIS_BCE
-```
-
-- **Part triplet.** Per-part cosine distances combine over mutually visible parts: visibility-weighted mean until
-  epoch 40, then log-sum-exp with γ ramped linearly to 5 by epoch 80. Pairs sharing no visible part are excluded.
-- **Random text erasing.** Per (sample, slot) the identity-prompt anchor is dropped from SupCon with p = 0.1, and from
-  i2t for slot 0. A per-slot Bernoulli dropout (p = 0.1) over text dimensions is shared across identities. The aim
-  is that image slots learn to stand on their own when their text anchor, or the part itself, is missing.
-- **Optional.** An XBM cross-batch memory for triplet mining (`BANK_SIZE`, off by default), and a self-attention
-  block after the cross-attention (`MIM_SELF_LAYERS`, 0).
+Visibility is the PifPaf presence in training and the visibility head's prediction at test. An invisible part's
+256-d block is zeroed, its token is masked out of the fused vector's attention, and it is excluded from every part loss
+and from matching. Two concatenated vectors are never compared directly: matching is block by block over the parts
+visible in both images.
 
 ### 4.5 Optimisation
 
-Adam, lr 3.5e-4 (bias lr ×2), weight decay 5e-4, 120 epochs, warmup (10 epochs, linear from ×0.01) then ×0.1 at
-epochs 40 and 70. Batch 64 with 4 instances per identity (PK sampling), AMP. Augmentations are flip, pad 10 + random
-crop, and random erasing with p = 0.5.
+Adam, lr 3.5e-4 (bias ×2), weight decay 5e-4, 120 epochs, warmup then ×0.1 at epochs 40 and 70, PK batches of 64
+(16 identities × 4), AMP, flip + pad/crop + random erasing.
 
-### 4.6 Inference
+## 5. Evaluation
 
-Three retrieval vectors (pre-BNNeck, as in CLIP-ReID), each slot L2-normalised then concatenated and normalised once:
+All distances are cosine distances. In the combined rows every distance is first divided by its own mean (mean-ratio),
+so the weights compare like with like; the global fallback of the part rows is rescaled to the part scale. Rows (mAP / Rank-1/5/10):
 
-| Row | Vector |
+| Row | Definition |
 |---|---|
-| `clipreid_baseline` | `cat(gap4, g)` |
-| `lpim` | `cat(z0, pbar)` |
-| `holistic` | `cat(gap4, g, z0, pbar)` |
-| `part_lse` | LSE (γ = 5) of per-part cosine distance over mutually visible parts (visibility = `vis_head > 0`) |
+| `clipreid_global` | `cat(gap4, g)` — CLIP-ReID's own feature |
+| `parts_selfattn` | the self-attended fused vector |
+| `parts_matching` | per-part cosine over parts visible in both images, mean (BPBreID-style); fewer than 2 shared parts → global distance |
+| `parts_matching_lse` | the same with a worst-part (log-sum-exp, γ = 5) combination |
+| `holistic` | `cat(gap4, g, fused)` as one vector |
+| `global+parts`, `global+parts_lse`, `all` | `clipreid_global` + weighted matching rows (+ self-attended row) |
+| `part_<name>` | each part alone (where both images show it) |
 
-Optional test-time only: k-reciprocal re-ranking (k1=50, k2=15, λ=0.3), plain or with the part-LSE distance as
-`local_distmat` (`<row>_rr`, `<row>_rr_lse`).
+Per-part invisible rates and the share of query–gallery pairs with unmatched parts are logged, and a results json is
+written per evaluation. Optional k-reciprocal re-ranking (`--rerank`) can use the part distance as its local matrix.
 
-## 5. Evaluation protocol
+## 6. Planned ablations (Market-1501, then Duke)
 
-Standard single-query mAP / CMC on query and gallery, for each row above. Market-1501 is the reference. The CLIP-ReID
-baseline reproduces at 89.3 mAP (paper: 89.8). Logged at each evaluation: per-part invisible rate, and the share of
-query-gallery pairs with an unmatched or no shared part.
+A. BPBreID-like (`--part-id-w 0 --part-indiv-w 0 --no-cross-part-neg`); B. + part ID; C. + part↔prompt cross-part
+contrast; D. + individual triplet; E. + hard-negative sampling; F. fusion detach on/off; G. stage-1 cross-part
+negatives and TAB on/off, judged on plain-EOT top-1 and on final stage-2 rows.
 
-## 6. Planned ablations
+## 7. Known limitations
 
-1. TAB on/off in stage 1, judged on plain-EOT top-1 and on final stage-2 mAP.
-2. Full-pool vs batch negatives; batch-positive t2i vs all-positive.
-3. Text erasing p ∈ {0, 0.1, 0.2, 0.3} and text dropout.
-4. Holistic vs baseline vs LPIM vs `part_lse`, with and without re-ranking.
-5. LSE γ schedule, XBM bank, and LPIM self-attention layers.
-6. Cross-dataset (MSMT17, DukeMTMC) with a per-dataset stage-1 checkpoint (asserted at load).
-
-## 7. Known limitations (from code audit)
-
-These are open issues in the current implementation, listed so results are not over-read.
-
-1. **TAB does not reach stage 2.** It shapes `cls_ctx` only. Its benefit is unproven until the on/off ablation
-   (§6.1). So far only a 1-epoch smoke run exists.
-2. **The holistic vector concatenates `z0` and `pbar`; there is no joint attention pool over global and parts.**
-   `alpha` is not masked by visibility, so occluded parts contribute to `pbar`.
-3. **Part discrimination has no per-part ID classifier.** It rests on the part triplet and a batch-only SupCon
-   (16 identities, with duplicated text columns giving a constant ≈ ln 4 floor per direction).
-4. **Visibility differs between train and test.** Ground-truth `present` is used in training and `vis_head` at test.
-   Visibility-head accuracy is not logged.
-5. **Stage-1 anchors are noisier for head and feet.** The prompts were aligned to frozen GWAP→linear features, which
-   lack q/k and positional terms, while stage 2 aligns LPIM tokens to them.
-6. **Observed gap.** In the server logs the holistic row (89.1–89.2) matches the baseline (89.2–89.3). `part_lse`
-   alone is lower (84.6–85.1). Whether the part branch gives a measurable gain over CLIP-ReID is still open.
-7. **Minor.** One TAB shared across slots with no slot embedding. The TAB t2i term ignores
-   `T2I_BATCH_POSITIVES=False`. TAB's loss is inactive without full-pool negatives. TAB weights in the bank are
-   stale between epoch rebuilds. fp16 cosines at temperature 0.01 under AMP are noisy.
+1. **Not yet trained or compared.** The pipeline is implemented and smoke-tested only; no result here shows it
+   beating CLIP-ReID. The `clipreid_global` row inside the same run is the reference.
+2. **Per-part ID loss goes against BPBreID's finding** that a part is rarely unique to one identity; kept modest and ablated.
+3. **Visibility head reliability.** Matching and the fused vector depend on the predicted visibility at test. After a
+   very short run the head predicts every part as visible; watch `vis_acc` and the per-part invisible rates.
+4. **Prompt adapters can co-adapt** with the part heads, making the alignment weak; ID and triplet losses also
+   constrain the heads, and the in-batch alignment top-1 is logged.
+5. **Part tokens are tied to PifPaf quality.** Head and feet are the weakest and most often invisible parts, and the
+   feet are the part that matters for the shoe case; the per-part rows show how good each one is.
+6. **Checkpoints from the previous architecture are not loadable** (stage 1 and stage 2 must be re-run).
+7. **Part embeddings are not spatially pure.** The part masks barely overlap (IoU <= 0.22), but the frozen part
+   embeddings of adjacent parts are very similar (cosine 0.81 for upper vs lower torso, legs vs lower torso), because
+   the RN50 features have a wide receptive field. Cross-part negatives between adjacent parts are therefore hard, and
+   may need to be restricted or ablated (`--no-cross-part-neg`).
+8. **Evaluation protocol.** The train/query/gallery paths are disjoint on Market-1501, DukeMTMC-reID and MSMT17, no
+   mask or label is read at test time, and the stage-1 prompts exist only for training identities. But "best so far"
+   is selected on the test set every 2 epochs; report the last epoch (or a held-out split) for a clean number.
+   Stage-1 top-1 is measured on training identities, so it shows fit, not generalisation.
+9. **Train/test visibility mismatch.** Training feeds the PifPaf presence into the fused vector; testing uses the
+   predicted visibility, which is only as good as the visibility head (`vis_acc` is logged).
