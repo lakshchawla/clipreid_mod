@@ -50,7 +50,7 @@ from processor.train_part_prompts_stage1 import (PartPromptLearner, encode_text,
                                                   PART_NAMES, K, S, SLOT_NAMES)
 from model.make_model_clipreid import load_clip_to_cpu, TextEncoder, weights_init_kaiming, weights_init_classifier
 from datasets.part_datasets import DATASETS, MASK_SUFFIX, build_dataset, mask_path, resolve_masks
-from datasets.sampler import RandomIdentitySampler
+from datasets.sampler import PartHardPKSampler
 from datasets.bases import ImageDataset, read_image
 from datasets.make_dataloader_clipreid import val_collate_fn
 from loss.softmax_loss import CrossEntropyLabelSmooth
@@ -91,6 +91,7 @@ USE_AMP = True
 ID_W, TRI_W, I2T_W = 1.0, 1.0, 1.0            # CLIP-ReID stage-2 weights on the baseline branch (GAP(x4), GAP(x3), xproj)
 LPIM_ID_W, LPIM_TRI_W = 1.0, 1.0              # ID + triplet on the LPIM global token z0 and the pooled parts
 PART_TRI_W = 1.0                              # per-part triplet on z1..zK (visibility-weighted, LSE annealed)
+PART_ID_W = 0.5                               # ID CE (own BNNeck head per part) on z1..zK, visible parts only
 SUPCON_W = 0.5                                # symmetric SupCon between z_s and the stage-1 identity prompts (PromptSG lambda)
 ATTN_W, VIS_W = 1.0, 0.1                      # attention-map KL to the PifPaf masks; part-presence BCE for the visibility head
 TEXT_ERASE_PROB = 0.1              # random text erasing: per (sample, slot), drop that slot's identity prompt from the
@@ -103,6 +104,16 @@ TEXT_DROPOUT = 0.1                 # Bernoulli mask over the 1024 text dimension
                                    # stays in one sub-space and logits remain comparable across classes). Applies to
                                    # both text consumers, i2t and SupCon. The LPIM semantic queries are never touched:
                                    # they are part of the test-time path. 0 = off.
+HARD_SAMPLING = False              # per-part hard-negative PK batches (PartHardPKSampler): each batch is built around one
+                                   # anchor identity and one slot, HARD_FRAC of the other identities being that anchor's
+                                   # nearest identities in that slot. Off = RandomIdentitySampler.
+HARD_FRAC = 0.5                    # share of the P-1 other identities drawn from the anchor's neighbours
+NBR_K = 15                         # neighbours kept per (slot, identity); identity level (751 on Market), not image level
+NBR_JACCARD = True                 # rank neighbours by (1-NBR_LAMBDA)*Jaccard(top-NBR_K1 sets) + NBR_LAMBDA*cosine distance
+NBR_K1, NBR_LAMBDA = 30, 0.3
+HARD_START_EPOCH = 10              # random PK until then (features and parts settle first)
+NBR_REFRESH = 10                   # epochs between neighbour-table rebuilds from the model's own per-identity mean z_s
+                                   # (0 = keep the table built from the stage-1 prompts text_all)
 MARGIN = 0.3
 LSE_GAMMA = 5.0                    # soft-max sharpness over parts (-> max distance as gamma grows)
 LSE_GAMMA_EPOCHS = (40, 80)        # part triplet uses the visibility-weighted mean until epoch 40, then gamma ramps
@@ -120,6 +131,7 @@ EVAL_SLOTWISE_NORM = True          # holistic vector: L2-normalise each slot bef
                                    # holistic_vector). False restores the CLIP-ReID convention of a single
                                    # normalisation over the concatenation. Eval-only, no retraining needed.
 EVAL_CHUNK = 2048
+GRID = ((H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1)      # x4 feature grid (attention_targets / training-time visibility)
 
 RERANK = False                     # k-reciprocal re-ranking (Zhong et al. CVPR'17, utils/reranking.py). Test-time
                                    # only: it changes no gradient and no checkpoint, so --rerank can be added to
@@ -197,12 +209,14 @@ class PartImageDataset(Dataset):
 def make_loaders(dataset, dataset_dir, masks_dir, batch):
     train_set = PartImageDataset(dataset.train, dataset_dir, masks_dir, MASKS_VARIANT)
     train_loader = DataLoader(train_set, batch_size=batch,
-                              sampler=RandomIdentitySampler(dataset.train, batch, NUM_INSTANCE),
+                              sampler=PartHardPKSampler(dataset.train, batch, NUM_INSTANCE, HARD_FRAC),
                               num_workers=NUM_WORKERS, drop_last=True)
     val_transforms = T.Compose([T.Resize((H, W)), T.ToTensor(), T.Normalize(PIXEL_MEAN, PIXEL_STD)])
     val_set = ImageDataset(dataset.query + dataset.gallery, val_transforms)
     val_loader = DataLoader(val_set, batch_size=TEST_BATCH, shuffle=False, num_workers=NUM_WORKERS, collate_fn=val_collate_fn)
-    return train_loader, val_loader
+    stats_loader = DataLoader(ImageDataset(dataset.train, val_transforms), batch_size=TEST_BATCH, shuffle=False,
+                              num_workers=NUM_WORKERS, collate_fn=val_collate_fn)
+    return train_loader, val_loader, stats_loader
 
 
 # ----------------------------------------------------------------------------- model
@@ -222,6 +236,14 @@ class BNNeckHead(nn.Module):
         return feat, self.fc(feat)
 
 
+def pool_parts(parts, logits, vis):
+    """Attentive pooling over the visible parts only: parts [N,K,D], logits [N,K], vis [N,K] bool -> pbar [N,D],
+    alpha [N,K]. A row with no visible part falls back to the learned weights over all parts."""
+    vis = vis | ~vis.any(1, keepdim=True)
+    alpha = torch.softmax(logits.masked_fill(~vis, float('-inf')), dim=1)
+    return (alpha[..., None].to(parts.dtype) * parts).sum(1), alpha
+
+
 class LanguageGuidedPartInteraction(nn.Module):
     """Language-guided Part Interaction Module (LPIM): K+1 semantic text queries attend over the x4 locations.
 
@@ -238,7 +260,9 @@ class LanguageGuidedPartInteraction(nn.Module):
       masks into where-to-look supervision instead of hard pooling weights; a visibility head on each part
       token predicts part presence so visibility is available at test time without masks.
     * Attentive pooling over the K part tokens (alpha = softmax(w . z_k)) gives one occlusion-aware parts vector.
-    forward(x4) -> dict(z [N,K+1,D], attn [N,K+1,HW], pbar [N,D], alpha [N,K], vis_logit [N,K]).
+    The pooling weights are masked by part visibility: `vis` [N,K] bool when given (ground-truth presence in
+    training), else the visibility head's own prediction (test), so an absent part never enters pbar.
+    forward(x4, vis=None) -> dict(z [N,K+1,D], attn [N,K+1,HW], pbar [N,D], alpha [N,K], vis_logit [N,K]).
     """
 
     def __init__(self, attnpool, text_queries, num_self_layers=MIM_SELF_LAYERS):
@@ -266,7 +290,7 @@ class LanguageGuidedPartInteraction(nn.Module):
         self.pool_w = nn.Linear(D, 1)
         self.vis_head = nn.Linear(D, 1)
 
-    def forward(self, x4):
+    def forward(self, x4, vis=None):
         N, C, Hf, Wf = x4.shape
         HW, h, d = Hf * Wf, self.num_heads, C // self.num_heads
         tokens = x4.flatten(2).transpose(1, 2) + self.pos_embed[None].to(x4.dtype)
@@ -281,9 +305,9 @@ class LanguageGuidedPartInteraction(nn.Module):
         for layer in self.self_layers:
             z = layer(z)
         parts = z[:, 1:]
-        alpha = torch.softmax(self.pool_w(parts).squeeze(-1).float(), dim=1)
-        pbar = (alpha[..., None].to(parts.dtype) * parts).sum(1)
-        return dict(z=z, attn=attn.mean(1), pbar=pbar, alpha=alpha, vis_logit=self.vis_head(parts).squeeze(-1).float())
+        vis_logit = self.vis_head(parts).squeeze(-1).float()
+        pbar, alpha = pool_parts(parts, self.pool_w(parts).squeeze(-1).float(), (vis_logit > 0) if vis is None else vis)
+        return dict(z=z, attn=attn.mean(1), pbar=pbar, alpha=alpha, vis_logit=vis_logit)
 
 
 class PartCLIPReID(nn.Module):
@@ -294,8 +318,8 @@ class PartCLIPReID(nn.Module):
     three; test feature cat(gap4, g) - the `clipreid_baseline` row.
     LPIM branch: z0 (global-semantic token) and pbar (attentively pooled parts), each with a BNNeck ID head;
     z1..zK for the per-part triplet / LSE matching; visibility from the LPIM head.
-    forward(x) -> dict(gap3, gap4, g, z, z0, zparts, pbar, attn, alpha, vis_logit[, score_gap4, score_g,
-    score_z0, score_pbar]).
+    forward(x, vis=None) -> dict(gap3, gap4, g, z, z0, zparts, pbar, attn, alpha, vis_logit[, score_gap4, score_g,
+    score_z0, score_pbar, score_parts]).
     The M1 variant (GWAP parts through a linear map, BPAM masks, concat ID head) is the ablation reference:
     git show e52d763.
     """
@@ -309,11 +333,12 @@ class PartCLIPReID(nn.Module):
         self.id_global = BNNeckHead(D, num_classes)
         self.id_z0 = BNNeckHead(D, num_classes)
         self.id_pbar = BNNeckHead(D, num_classes)
+        self.id_parts = nn.ModuleList([BNNeckHead(D, num_classes) for _ in range(K)])
 
-    def forward(self, x):
+    def forward(self, x, vis=None):
         x3, x4, xproj = self.visual(x)
         gap3, gap4, g = x3.mean((2, 3)), x4.mean((2, 3)), xproj[0]
-        out = self.lpim(x4)
+        out = self.lpim(x4, vis)
         res = dict(gap3=gap3, gap4=gap4, g=g, z=out['z'], z0=out['z'][:, 0], zparts=out['z'][:, 1:], pbar=out['pbar'],
                    attn=out['attn'], alpha=out['alpha'], vis_logit=out['vis_logit'], grid=tuple(x4.shape[2:]))
         if self.training:
@@ -321,6 +346,7 @@ class PartCLIPReID(nn.Module):
             res['score_g'] = self.id_global(g)[1]
             res['score_z0'] = self.id_z0(res['z0'])[1]
             res['score_pbar'] = self.id_pbar(res['pbar'])[1]
+            res['score_parts'] = torch.stack([h(res['zparts'][:, k])[1] for k, h in enumerate(self.id_parts)], dim=1)
         return res
 
 
@@ -455,6 +481,46 @@ def lse_gamma_at(epoch):
     return LSE_GAMMA * min(1.0, (epoch - e0) / max(e1 - e0, 1))
 
 
+def build_neighbours(feats, k=NBR_K, jaccard=None, k1=None, lam=None):
+    """Per-slot confusable identities. feats [C,S,D] -> nbr [S,C,k] int64 (numpy), nearest first, self excluded.
+    Distance per slot = (1-lam)*Jaccard(top-k1 sets) + lam*cosine distance (cosine only if jaccard is off)."""
+    jaccard, k1, lam = NBR_JACCARD if jaccard is None else jaccard, k1 or NBR_K1, NBR_LAMBDA if lam is None else lam
+    f = F.normalize(feats.float(), dim=-1)
+    C = f.shape[0]
+    k, k1 = min(k, C - 1), min(k1, C - 1)
+    out = []
+    for s_ in range(f.shape[1]):
+        dist = 1 - f[:, s_] @ f[:, s_].t()
+        if jaccard:
+            member = torch.zeros_like(dist).scatter_(1, dist.topk(k1 + 1, largest=False).indices, 1.0)
+            inter = member @ member.t()
+            union = member.sum(1)[:, None] + member.sum(1)[None] - inter
+            dist = (1 - lam) * (1 - inter / union) + lam * dist
+        dist.fill_diagonal_(float('inf'))
+        out.append(dist.topk(k, largest=False).indices.cpu())
+    return torch.stack(out).numpy()
+
+
+@torch.no_grad()
+def identity_slot_means(model, loader, num_classes):
+    """The model's own identity prototypes: mean z_s per identity over the (un-augmented) train set, and the
+    fraction of an identity's images in which each part is predicted visible. -> [C,S,D], [C,S]."""
+    model.eval()
+    sums, count, vis = None, torch.zeros(num_classes, device=DEVICE), None
+    for img, pid, _, _, _, _ in loader:
+        res = model(img.to(DEVICE))
+        pid = torch.as_tensor(np.asarray(pid), device=DEVICE).long()
+        z = res['z'].float()
+        if sums is None:
+            sums = torch.zeros(num_classes, *z.shape[1:], device=DEVICE)
+            vis = torch.zeros(num_classes, z.shape[1], device=DEVICE)
+        v = torch.cat([torch.ones_like(res['vis_logit'][:, :1]), (res['vis_logit'] > 0).float()], dim=1)
+        sums.index_add_(0, pid, z)
+        vis.index_add_(0, pid, v)
+        count.index_add_(0, pid, torch.ones_like(pid, dtype=torch.float))
+    return sums / count.clamp(min=1)[:, None, None], vis / count.clamp(min=1)[:, None]
+
+
 def attention_targets(masks, size):
     """PifPaf soft masks [N,K+1,H,W] -> per-part attention targets [N,K,HW] (sum to 1) and presence [N,K] (bool):
     a part is present when it wins the argmax somewhere on the feature grid (BPBreID's rule on the targets)."""
@@ -474,9 +540,10 @@ class Stage2Loss(nn.Module):
                    (PromptSG's L_SupCon, batch positives / batch negatives, normalised, CLIP temperature)
         Random text erasing (training only, erased_text): TEXT_ERASE_PROB drops a (sample, slot) prompt anchor
         from SupCon and, for slot 0, that sample from i2t; TEXT_DROPOUT masks text embedding dimensions.
+        part_id  = ID CE on each part token through its own BNNeck head, on the images where that part is present
         attn     = KL(PifPaf part mask || part attention map), present parts only;  vis = BCE(vis_logit, present)
     loss = ID_W*id + TRI_W*tri + I2T_W*i2t + LPIM_ID_W*lpim_id + LPIM_TRI_W*lpim_tri + PART_TRI_W*part_tri
-           + SUPCON_W*supcon + ATTN_W*attn + VIS_W*vis"""
+           + PART_ID_W*part_id + SUPCON_W*supcon + ATTN_W*attn + VIS_W*vis"""
 
     def __init__(self, num_classes, text_all):
         super().__init__()
@@ -527,7 +594,10 @@ class Stage2Loss(nn.Module):
                 continue
             z_s, t_s, tgt = res['z'][keep, s_].float(), text_b[keep, s_], target[keep]
             supcon_terms.append(supcon(z_s, t_s, tgt, tgt) + supcon(t_s, z_s, tgt, tgt))
-        terms['supcon'] = sum(supcon_terms) / len(supcon_terms)
+        terms['supcon'] = sum(supcon_terms) / len(supcon_terms) if supcon_terms else res['z'].sum() * 0
+
+        part_id = [self.xent(res['score_parts'][present[:, k], k], target[present[:, k]]) for k in range(K) if present[:, k].any()]
+        terms['part_id'] = sum(part_id) / len(part_id) if part_id else res['z'].sum() * 0
 
         attn = res['attn'][:, 1:].float().clamp(min=1e-8)
         kl = (attn_target * (attn_target.clamp(min=1e-8).log() - attn.log())).sum(-1)
@@ -536,7 +606,7 @@ class Stage2Loss(nn.Module):
 
         total = (ID_W * terms['id'] + TRI_W * terms['tri'] + I2T_W * terms['i2t']
                  + LPIM_ID_W * terms['lpim_id'] + LPIM_TRI_W * terms['lpim_tri'] + PART_TRI_W * terms['part_tri']
-                 + SUPCON_W * terms['supcon'] + ATTN_W * terms['attn'] + VIS_W * terms['vis'])
+                 + PART_ID_W * terms['part_id'] + SUPCON_W * terms['supcon'] + ATTN_W * terms['attn'] + VIS_W * terms['vis'])
         return total, terms
 
 
@@ -723,7 +793,26 @@ def save_checkpoint(model, optimizer, scheduler, epoch, path):
 
 
 # ----------------------------------------------------------------------------- stage 2
-def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logger, start_epoch=1, resume=None):
+def update_hard_sampler(epoch, model, criterion, train_loader, stats_loader, logger):
+    """HARD_SAMPLING: random PK until HARD_START_EPOCH, then batches built around confusable identities. The table
+    comes from the stage-1 prompts (text_all) first and is rebuilt from the model's own prototypes every NBR_REFRESH."""
+    sampler = train_loader.sampler
+    if not HARD_SAMPLING or not isinstance(sampler, PartHardPKSampler):
+        return
+    if epoch < HARD_START_EPOCH:
+        sampler.set_neighbours(None)
+    elif NBR_REFRESH > 0 and (epoch - HARD_START_EPOCH) % NBR_REFRESH == 0:
+        protos, vis_rate = identity_slot_means(model, stats_loader, criterion.text_all.shape[0])
+        sampler.set_neighbours(build_neighbours(protos), (vis_rate >= 0.5).t().cpu().numpy())
+        logger.info(f'epoch {epoch}: hard-negative table rebuilt from model prototypes (k={NBR_K}, hard_frac={HARD_FRAC}, '
+                    f'anchor-eligible identities per slot: {(vis_rate >= 0.5).sum(0).tolist()})')
+    elif sampler.nbr is None:
+        sampler.set_neighbours(build_neighbours(criterion.text_all))
+        logger.info(f'epoch {epoch}: hard-negative table built from stage-1 prompts (k={NBR_K}, hard_frac={HARD_FRAC})')
+
+
+def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logger, start_epoch=1, resume=None,
+                    stats_loader=None):
     """processor_clipreid_stage2.py:73-137 with the part losses and the two-distance evaluation."""
     optimizer = make_optimizer(model)
     scheduler = WarmupMultiStepLR(optimizer, STEPS, GAMMA, WARMUP_FACTOR, WARMUP_ITERS, WARMUP_METHOD)
@@ -731,7 +820,7 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
         optimizer.load_state_dict(resume['optimizer'])
         scheduler.load_state_dict(resume['scheduler'])
     scaler = amp.GradScaler(enabled=USE_AMP)
-    meters = {k: AverageMeter() for k in ['loss', 'id', 'tri', 'i2t', 'lpim_id', 'lpim_tri', 'part_tri', 'supcon', 'attn', 'vis', 'acc']}
+    meters = {k: AverageMeter() for k in ['loss', 'id', 'tri', 'i2t', 'lpim_id', 'lpim_tri', 'part_tri', 'part_id', 'supcon', 'attn', 'vis', 'vis_acc', 'acc']}
     best = {}
     feat_bank = FeatureBank(BANK_SIZE, model.lpim.c_proj.out_features, K, DEVICE) if BANK_SIZE > 0 else None
     if feat_bank is not None:
@@ -743,14 +832,16 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
             m.reset()
         scheduler.step()
         criterion.part_triplet.gamma = lse_gamma_at(epoch)
+        update_hard_sampler(epoch, model, criterion, train_loader, stats_loader, logger)
         model.train()
         start = time.time()
         for n_iter, (img, masks, target, _) in enumerate(train_loader):
             optimizer.zero_grad()
             img, masks, target = img.to(DEVICE), masks.to(DEVICE), target.to(DEVICE)
             use_bank = feat_bank is not None and epoch >= BANK_START_EPOCH and feat_bank.filled > 0
+            present = attention_targets(masks, GRID)[1]
             with amp.autocast(enabled=USE_AMP):
-                res = model(img)
+                res = model(img, present)
                 loss, terms = criterion(res, masks, target, feat_bank.get() if use_bank else None)
             if feat_bank is not None:
                 feat_bank.add(res['z0'], res['zparts'], res['vis_logit'] > 0, target)
@@ -758,6 +849,7 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
             scaler.step(optimizer)
             scaler.update()
             acc = (res['score_gap4'].max(1)[1] == target).float().mean()
+            meters['vis_acc'].update(((res['vis_logit'] > 0) == present).float().mean().item(), 1)
             meters['loss'].update(loss.item(), img.shape[0])
             meters['acc'].update(acc.item(), 1)
             for k, v in terms.items():
@@ -765,9 +857,9 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
             if (n_iter + 1) % LOG_PERIOD == 0:
                 m = {k: v.avg for k, v in meters.items()}
                 logger.info('Epoch[{}] Iteration[{}/{}] Loss: {:.3f} (id {:.3f} tri {:.3f} i2t {:.3f} | lpim_id {:.3f} lpim_tri {:.3f} '
-                            'part_tri {:.3f} supcon {:.3f} attn {:.3f} vis {:.3f}) Acc: {:.3f}, Base Lr: {:.2e}, LSE gamma: {:.2f}'
+                            'part_tri {:.3f} part_id {:.3f} supcon {:.3f} attn {:.3f} vis {:.3f} vis_acc {:.3f}) Acc: {:.3f}, Base Lr: {:.2e}, LSE gamma: {:.2f}'
                             .format(epoch, n_iter + 1, len(train_loader), m['loss'], m['id'], m['tri'], m['i2t'], m['lpim_id'],
-                                    m['lpim_tri'], m['part_tri'], m['supcon'], m['attn'], m['vis'], m['acc'],
+                                    m['lpim_tri'], m['part_tri'], m['part_id'], m['supcon'], m['attn'], m['vis'], m['vis_acc'], m['acc'],
                                     scheduler.get_lr()[0], criterion.part_triplet.gamma))
         time_per_batch = (time.time() - start) / (n_iter + 1)
         logger.info('Epoch {} done. Loss: {:.3f} Time per batch: {:.3f}[s] Speed: {:.1f}[samples/s]'
@@ -789,6 +881,7 @@ def do_train_stage2(model, criterion, train_loader, val_loader, num_query, logge
 
 def main():
     global MAX_EPOCHS, IMS_PER_BATCH, EVAL_PERIOD, TEXT_ERASE_PROB, TEXT_DROPOUT, DATASET, OUTPUT_DIR
+    global HARD_SAMPLING, HARD_FRAC, NBR_K, HARD_START_EPOCH, NBR_REFRESH, PART_ID_W
     global MASKS_VARIANT, MASKS_DIR
     global RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2, RERANK_LAMBDA, RERANK_LOCAL_W
     global RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE
@@ -807,6 +900,13 @@ def main():
                         help='random text erasing: drop a (sample, slot) identity prompt from i2t / SupCon (0 = off)')
     parser.add_argument('--text-dropout', type=float, default=TEXT_DROPOUT,
                         help='Bernoulli dropout over the text embedding dimensions (0 = off)')
+    parser.add_argument('--hard-sampling', action='store_true', default=HARD_SAMPLING,
+                        help='per-part hard-negative PK batches (HARD_SAMPLING)')
+    parser.add_argument('--hard-frac', type=float, default=HARD_FRAC)
+    parser.add_argument('--nbr-k', type=int, default=NBR_K)
+    parser.add_argument('--hard-start-epoch', type=int, default=HARD_START_EPOCH)
+    parser.add_argument('--nbr-refresh', type=int, default=NBR_REFRESH, help='0 = keep the stage-1 prompt table')
+    parser.add_argument('--part-id-w', type=float, default=PART_ID_W)
     parser.add_argument('--rerank', action='store_true', help='k-reciprocal re-ranking rows (test-time only)')
     parser.add_argument('--rerank-feature', choices=['holistic', 'lpim', 'clipreid_baseline'], default=RERANK_FEATURE)
     parser.add_argument('--rerank-k1', type=int, default=RERANK_K1)
@@ -822,6 +922,8 @@ def main():
     args.stage1_ckpt = args.stage1_ckpt or STAGE1_CKPT.format(dataset=DATASET)
     MASKS_VARIANT, MASKS_DIR = args.masks_variant, args.masks_dir
     TEXT_ERASE_PROB, TEXT_DROPOUT = args.text_erase_prob, args.text_dropout
+    HARD_SAMPLING, HARD_FRAC, NBR_K, HARD_START_EPOCH = args.hard_sampling, args.hard_frac, args.nbr_k, args.hard_start_epoch
+    NBR_REFRESH, PART_ID_W = args.nbr_refresh, args.part_id_w
     RERANK, RERANK_FEATURE, RERANK_K1, RERANK_K2 = args.rerank, args.rerank_feature, args.rerank_k1, args.rerank_k2
     RERANK_LAMBDA, RERANK_LOCAL_W = args.rerank_lambda, args.rerank_local_w
     RERANK_ONLY_LOCAL, RERANK_EVERY_EVAL, RERANK_DEVICE = args.rerank_only_local, args.rerank_every_eval, args.rerank_device
@@ -833,18 +935,19 @@ def main():
     logger.info('knobs: ' + ', '.join(f'{k}={v}' for k, v in dict(
         DATASET=DATASET, MASKS_VARIANT=MASKS_VARIANT, MASKS_DIR=MASKS_DIR, H=H, W=W, IMS_PER_BATCH=IMS_PER_BATCH, NUM_INSTANCE=NUM_INSTANCE, MAX_EPOCHS=MAX_EPOCHS, BASE_LR=BASE_LR,
         STEPS=STEPS, ID_W=ID_W, TRI_W=TRI_W, I2T_W=I2T_W, LPIM_ID_W=LPIM_ID_W, LPIM_TRI_W=LPIM_TRI_W, PART_TRI_W=PART_TRI_W,
-        SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, TEXT_ERASE_PROB=TEXT_ERASE_PROB, TEXT_DROPOUT=TEXT_DROPOUT, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
+        PART_ID_W=PART_ID_W, SUPCON_W=SUPCON_W, ATTN_W=ATTN_W, VIS_W=VIS_W, TEXT_ERASE_PROB=TEXT_ERASE_PROB, TEXT_DROPOUT=TEXT_DROPOUT, LSE_GAMMA_EPOCHS=LSE_GAMMA_EPOCHS, MIM_SELF_LAYERS=MIM_SELF_LAYERS,
         MARGIN=MARGIN, LSE_GAMMA=LSE_GAMMA, LSE_INCLUDE_GLOBAL=LSE_INCLUDE_GLOBAL, FUSE_W=FUSE_W, USE_AMP=USE_AMP,
         BANK_SIZE=BANK_SIZE, BANK_START_EPOCH=BANK_START_EPOCH, EVAL_SLOTWISE_NORM=EVAL_SLOTWISE_NORM,
         RERANK=RERANK, RERANK_FEATURE=RERANK_FEATURE, RERANK_K1=RERANK_K1, RERANK_K2=RERANK_K2,
         RERANK_LAMBDA=RERANK_LAMBDA, RERANK_LOCAL_W=RERANK_LOCAL_W, RERANK_ONLY_LOCAL=RERANK_ONLY_LOCAL,
-        RERANK_EVERY_EVAL=RERANK_EVERY_EVAL).items()))
+        RERANK_EVERY_EVAL=RERANK_EVERY_EVAL, HARD_SAMPLING=HARD_SAMPLING, HARD_FRAC=HARD_FRAC, NBR_K=NBR_K,
+        NBR_JACCARD=NBR_JACCARD, HARD_START_EPOCH=HARD_START_EPOCH, NBR_REFRESH=NBR_REFRESH).items()))
 
     dataset, dataset_dir = build_dataset(DATASET, DATA_ROOT)
     masks_dir = resolve_masks(DATASET, dataset, dataset_dir, logger.info, require=not args.eval_only,
                               variant=MASKS_VARIANT, masks=MASKS_DIR)
     num_classes, num_query = dataset.num_train_pids, len(dataset.query)
-    train_loader, val_loader = make_loaders(dataset, dataset_dir, masks_dir, IMS_PER_BATCH)
+    train_loader, val_loader, stats_loader = make_loaders(dataset, dataset_dir, masks_dir, IMS_PER_BATCH)
 
     h_res, w_res = (H - 16) // STRIDE + 1, (W - 16) // STRIDE + 1
     clip = load_clip_to_cpu(BACKBONE, h_res, w_res, STRIDE).to(DEVICE)
@@ -858,7 +961,8 @@ def main():
 
     if args.eval_only:
         ckpt = torch.load(args.weights, map_location=DEVICE)
-        model.load_state_dict(ckpt['model'])
+        missing = model.load_state_dict(ckpt['model'], strict=False)       # older checkpoints lack the per-part ID heads
+        logger.info(f'checkpoint keys missing: {missing.missing_keys} unexpected: {missing.unexpected_keys}')
         evaluate(model, val_loader, num_query, logger, f"{args.weights} (epoch {ckpt['epoch']})", rerank=RERANK)
         return
 
@@ -868,7 +972,7 @@ def main():
         model.load_state_dict(resume['model'])
         start_epoch = resume['epoch'] + 1
         logger.info(f"resuming from {args.resume} (epoch {resume['epoch']})")
-    do_train_stage2(model, criterion, train_loader, val_loader, num_query, logger, start_epoch, resume)
+    do_train_stage2(model, criterion, train_loader, val_loader, num_query, logger, start_epoch, resume, stats_loader)
 
 
 if __name__ == '__main__':

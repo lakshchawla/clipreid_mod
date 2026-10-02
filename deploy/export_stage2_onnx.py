@@ -46,7 +46,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from processor.train_part_prompts_stage2 import PartCLIPReID, PIXEL_MEAN, PIXEL_STD, EVAL_SLOTWISE_NORM
+from processor.train_part_prompts_stage2 import PartCLIPReID, pool_parts, PIXEL_MEAN, PIXEL_STD, EVAL_SLOTWISE_NORM
 from processor.train_part_prompts_stage1 import PART_NAMES
 from model.make_model_clipreid import load_clip_to_cpu
 
@@ -134,8 +134,9 @@ class Stage2Embedder(nn.Module):
         for layer in m.self_layers:
             z = layer(z)
         parts = z[:, 1:]
-        alpha = torch.softmax(m.pool_w(parts).squeeze(-1), dim=1)
-        return z[:, 0], parts, (alpha[..., None] * parts).sum(1), m.vis_head(parts).squeeze(-1)
+        vis_logit = m.vis_head(parts).squeeze(-1)
+        pbar, _ = pool_parts(parts, m.pool_w(parts).squeeze(-1), vis_logit > 0)       # visibility-masked, as in training
+        return z[:, 0], parts, pbar, vis_logit
 
     def forward(self, x):
         if self.normalize_in_graph:
@@ -179,7 +180,7 @@ def build_model(weights, random_weights, num_classes, logger=print):
     clip = load_clip_to_cpu(knobs['BACKBONE'], (knobs['H'] - 16) // knobs['STRIDE'] + 1,
                             (knobs['W'] - 16) // knobs['STRIDE'] + 1, knobs['STRIDE'])
     model = PartCLIPReID(clip.visual.float(), num_classes, state['lpim.text_queries'].float())
-    model.load_state_dict({k: v.float() for k, v in state.items()})
+    model.load_state_dict({k: v.float() for k, v in state.items()}, strict=False)   # old checkpoints lack id_parts (train-only)
     logger(f"loaded {weights} (epoch {ckpt['epoch']}), {num_classes} classes, knobs: "
            + ', '.join(f'{k}={v}' for k, v in knobs.items()))
     return model.eval(), knobs
